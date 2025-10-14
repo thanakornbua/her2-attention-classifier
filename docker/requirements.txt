@@ -1,7 +1,7 @@
 # Core (with cu128 support)
-#torch==2.8.0+cu128
-#torchvision==0.17.0+cu128   # or matching version available for cu128
-#torchaudio==2.8.0+cu128     # or matching torchaudio build +cu128
+torch==2.8.0+cu128
+torchvision==0.17.0+cu128   # or matching version available for cu128
+torchaudio==2.8.0+cu128     # or matching torchaudio build +cu128
 
 # Other dependencies
 numpy==1.26.4
