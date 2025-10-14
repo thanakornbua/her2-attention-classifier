@@ -1,7 +1,9 @@
 {
     "name": "HER2 Classifier Dev",
-    "image": "her2-classifier-conda:gpu",   // or Dockerfile: "Dockerfile"
+    "image": "tyuiopertyuiop/her2-classifier-conda:gpu",
     "workspaceFolder": "/workspace/her2-attention-classifier",
+    "runArgs": ["--gpus", "all"],
+    "forwardPorts": [8888, 6006],
     "extensions": [
         "ms-python.python",
         "ms-toolsai.jupyter"
