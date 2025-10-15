@@ -2,7 +2,8 @@
     "name": "HER2 Classifier Dev",
     "image": "tyuiopertyuiop/her2-classifier-conda:gpu",
     "workspaceFolder": "/workspace/her2-attention-classifier",
-    "runArgs": ["--gpus", "all"],
+    "runArgs": ["--gpus", "all",
+                "--runtime=nvidia"],
     "forwardPorts": [8888, 6006],
     "extensions": [
         "ms-python.python",
@@ -11,5 +12,6 @@
     "settings": {
         "python.pythonPath": "/opt/conda/envs/her2-class/bin/python"
     },
+    "postStartCommand": "bash scripts/bootstrap.sh",
     "remoteUser": "root"
 }
