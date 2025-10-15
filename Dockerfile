@@ -14,6 +14,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     git \
     vim \
     nano \
+    sudo \
+    htop \
+    screen \
+    man \
+    cat \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Miniconda
@@ -35,6 +40,14 @@ COPY environment.yml .
 RUN conda tos accept --override-channels --channel https://repo.anaconda.com/pkgs/main && \
     conda tos accept --override-channels --channel https://repo.anaconda.com/pkgs/r && \
     conda env create -f environment.yml
+
+
+# Copy the post-boot script
+COPY docker/bootstrap.sh /usr/local/bin/bootstrap.sh
+RUN chmod +x /usr/local/bin/bootstrap.sh
+
+# Automatically run the bootstrap when container starts
+ENTRYPOINT ["/usr/local/bin/bootstrap.sh"]
 
 # Activate environment by default
 SHELL ["conda", "run", "-n", "her2-class", "/bin/bash", "-c"]
