@@ -24,5 +24,19 @@ else
     echo "Environment initialized. Skipping bootstrap."
 fi
 
+# Auto-update from Git if safe
+cd /workspace/her2-attention-classifier
+
+if [ -d .git ]; then
+    echo "🔄 Checking for Git updates..."
+    if git diff --quiet && git diff --cached --quiet; then
+        git pull --rebase
+        echo "Repository updated."
+    else
+        echo "Local changes detected. Please push to repository first. Skipping auto-pull."
+    fi
+fi
+
+
 # Keep shell open
 exec bash
