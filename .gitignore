@@ -2,3 +2,5 @@
 *.tar.gz
 *.tar.bz2
 *.tar.xz
+*.pyc
+__pycache__/
