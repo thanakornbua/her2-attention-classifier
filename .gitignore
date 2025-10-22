@@ -3,4 +3,11 @@
 *.tar.bz2
 *.tar.xz
 *.pyc
+*.xml
+*.svs
+*.csv
+*.txt
+*.sums
+*.xlsx
+data/
 __pycache__/
