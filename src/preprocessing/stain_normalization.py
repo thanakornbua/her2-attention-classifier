@@ -45,8 +45,10 @@ def macenko_normalization(image, target_concentrations=None, target_stains=None)
     if target_stains is None or target_concentrations is None:
         target_stains, target_concentrations = get_default_reference()
     
-    # Reconstruct image with target stains
-    normalized_od = target_stains @ target_concentrations
+    # Reconstruct image with target stains using SOURCE concentrations
+    # Keep the tissue structure (concentrations) but change color (stains)
+    h, w, c = image_od.shape
+    normalized_od = (target_stains @ concentrations_source).T.reshape(h, w, c)
     normalized_image = od_to_rgb(normalized_od)
     
     # Ensure output matches input dtype and range
