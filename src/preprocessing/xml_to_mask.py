@@ -1,15 +1,9 @@
-import os
-from pathlib import Path
 import numpy as np
-from PIL import Image
-
-# XML parsing: lxml is faster and supports XPath
 try:
     from lxml import etree as ET
 except Exception:
     import xml.etree.ElementTree as ET
 
-# WSI reader: prefer cucim if available, else openslide
 USE_CUCIM = False
 try:
     import cucim
@@ -24,11 +18,6 @@ except Exception:
 import cv2
 
 HAS_CV2_CUDA = hasattr(cv2, 'cuda')
-try:
-    import cupy as cp
-    HAS_CUPY = True
-except Exception:
-    HAS_CUPY = False
 
 def parse_xml_lxml(xml_path):
     polygons = []
@@ -70,7 +59,8 @@ def polygon_bbox(polygon, pad=0):
 
 def read_wsi_region(wsi_reader, x, y, w, h, level=0):
     if USE_CUCIM and isinstance(wsi_reader, CuImage):
-        patch = wsi_reader.read_region((x, y), level, (w, h))
+        # CuCIM expects (location, size, level); use kwargs for safety across versions
+        patch = wsi_reader.read_region(location=(x, y), size=(w, h), level=level)
         arr = np.asarray(patch)
         if arr.ndim == 3 and arr.shape[2] >= 3:
             return arr[:, :, :3]
@@ -88,20 +78,58 @@ def process_slide(
 ):
     print(f"Processing: {wsi_path} + {xml_path}")
 
+    # Open WSI and determine dimensions in a robust way across CuCIM/OpenSlide
     if USE_CUCIM:
         wsi = CuImage(str(wsi_path))
-        slide_w, slide_h = wsi.get_width(), wsi.get_height()
+        # CuImage API varies between versions; try multiple attribute/method patterns
+        slide_w = slide_h = None
+        # 1) get_width / get_height methods
+        if hasattr(wsi, 'get_width') and hasattr(wsi, 'get_height'):
+            try:
+                slide_w = int(wsi.get_width())
+                slide_h = int(wsi.get_height())
+            except Exception:
+                slide_w = slide_h = None
+        # 2) width / height attributes
+        if slide_w is None and hasattr(wsi, 'width') and hasattr(wsi, 'height'):
+            try:
+                slide_w = int(wsi.width)
+                slide_h = int(wsi.height)
+            except Exception:
+                slide_w = slide_h = None
+        # 3) shape (H,W,...) -> (W,H)
+        if slide_w is None and hasattr(wsi, 'shape'):
+            try:
+                sh = wsi.shape
+                if len(sh) >= 2:
+                    slide_h = int(sh[0])
+                    slide_w = int(sh[1])
+            except Exception:
+                slide_w = slide_h = None
+        # 4) get_dimensions() or get_size()
+        if slide_w is None and hasattr(wsi, 'get_dimensions'):
+            try:
+                dims = wsi.get_dimensions()
+                if isinstance(dims, (tuple, list)) and len(dims) >= 2:
+                    slide_w = int(dims[0])
+                    slide_h = int(dims[1])
+            except Exception:
+                slide_w = slide_h = None
+        if slide_w is None and hasattr(wsi, 'size'):
+            try:
+                s = wsi.size
+                if isinstance(s, (tuple, list)) and len(s) >= 2:
+                    slide_w = int(s[0])
+                    slide_h = int(s[1])
+            except Exception:
+                slide_w = slide_h = None
+        if slide_w is None or slide_h is None:
+            raise AttributeError(f"Could not determine CuImage dimensions for {wsi_path}; available attrs: {dir(wsi)[:10]}")
     else:
         wsi = openslide.OpenSlide(str(wsi_path))
         slide_w, slide_h = wsi.dimensions
 
     print(f"Slide dimensions: width={slide_w}, height={slide_h}")
-
-    if USE_CUCIM:
-        wsi_image = np.asarray(wsi.read_region((0, 0), 0, (slide_w, slide_h)))
-    else:
-        wsi_image = np.array(wsi.read_region((0, 0), 0, (slide_w, slide_h)).convert("RGB"))
-    print(f"WSI image shape: {wsi_image.shape}")
 
     mask = np.zeros((slide_h, slide_w), dtype=np.uint8)
     polygons = parse_xml_lxml(xml_path)
@@ -124,8 +152,7 @@ def process_slide(
     if mask.max() <= 1:
         mask = (mask * 255).astype(np.uint8)
 
-    if wsi_image.shape[:2] != (slide_h, slide_w):
-        raise ValueError(f"Mismatch between WSI image dimensions {wsi_image.shape[:2]} and mask dimensions {(slide_h, slide_w)}")
+    # Avoid asserting on full-image array shape; we may not read full image at all
 
     use_cuda = HAS_CV2_CUDA
     est_bytes = slide_h * slide_w * 3
@@ -141,10 +168,49 @@ def process_slide(
     result_overlay = None
     if use_cuda and process_entire:
         try:
+            # Read full image only for full-image GPU path
+            if USE_CUCIM:
+                wsi_image = np.asarray(
+                    wsi.read_region(location=(0, 0), size=(slide_w, slide_h), level=0)
+                )
+            else:
+                wsi_image = np.array(
+                    wsi.read_region((0, 0), 0, (slide_w, slide_h)).convert("RGB")
+                )
+
+            # Prepare GPU mats. The CUDA arithm functions require the mask to be
+            # a single-channel CV_8UC1 image with the same spatial size as the
+            # source image. Convert/rescale/resize the mask if necessary.
+            mask_for_cuda = mask
+            # If mask is RGB overlay, convert to single-channel
+            if hasattr(mask_for_cuda, 'ndim') and mask_for_cuda.ndim == 3:
+                try:
+                    mask_for_cuda = cv2.cvtColor(mask_for_cuda, cv2.COLOR_BGR2GRAY)
+                except Exception:
+                    mask_for_cuda = mask_for_cuda[:, :, 0]
+
+            # Ensure dtype is uint8 and values are 0..255
+            if mask_for_cuda.dtype != np.uint8:
+                try:
+                    if mask_for_cuda.max() <= 1:
+                        mask_for_cuda = (mask_for_cuda * 255).astype(np.uint8)
+                    else:
+                        mask_for_cuda = mask_for_cuda.astype(np.uint8)
+                except Exception:
+                    mask_for_cuda = mask_for_cuda.astype(np.uint8)
+
+            # Ensure mask matches image dimensions (h, w)
+            if mask_for_cuda.shape[:2] != wsi_image.shape[:2]:
+                mask_for_cuda = cv2.resize(
+                    mask_for_cuda,
+                    (wsi_image.shape[1], wsi_image.shape[0]),
+                    interpolation=cv2.INTER_NEAREST,
+                )
+
             g_img = cv2.cuda_GpuMat()
             g_img.upload(wsi_image)
             g_mask = cv2.cuda_GpuMat()
-            g_mask.upload(mask)
+            g_mask.upload(mask_for_cuda)
             g_result = cv2.cuda.bitwise_and(g_img, g_img, mask=g_mask)
             result = g_result.download()
             if wsi_with_mask_path:
@@ -162,7 +228,8 @@ def process_slide(
             h = min(chunk_size, slide_h - y)
             for x in range(0, slide_w, chunk_size):
                 w = min(chunk_size, slide_w - x)
-                region = wsi_image[y:y + h, x:x + w]
+                # Read region on-demand to avoid full-image memory usage
+                region = read_wsi_region(wsi, x, y, w, h, level=0)
                 mask_patch = mask[y:y + h, x:x + w]
                 if mask_patch.dtype != np.uint8:
                     mask_patch = (mask_patch.astype(np.uint8) * 255) if mask_patch.max() <= 1 else mask_patch.astype(np.uint8)
@@ -190,7 +257,7 @@ def process_slide(
             h = min(chunk_size, slide_h - y)
             for x in range(0, slide_w, chunk_size):
                 w = min(chunk_size, slide_w - x)
-                region = wsi_image[y:y + h, x:x + w]
+                region = read_wsi_region(wsi, x, y, w, h, level=0)
                 mask_patch = mask[y:y + h, x:x + w]
                 if mask_patch.dtype != np.uint8:
                     mask_patch = (mask_patch.astype(np.uint8) * 255) if mask_patch.max() <= 1 else mask_patch.astype(np.uint8)
@@ -207,12 +274,76 @@ def process_slide(
         _save_result(overlay, wsi_with_mask_path)
     result_overlay = overlay
 
-    try:
-        del wsi_image
-    except Exception:
-        pass
+    # wsi_image may not exist if we avoided full-image path; ignore
     del mask
     del overlay
 
     return wsi_with_mask_path if wsi_with_mask_path else result_overlay
+
+
+def get_mask(xml_path, wsi_path):
+    """Generate a 2D uint8 binary mask (0/255) directly from XML polygons.
+
+    This avoids building an RGB overlay and avoids reading the entire WSI
+    image. Only the WSI dimensions are required to size the mask.
+    """
+    # Open WSI and robustly determine dimensions
+    if USE_CUCIM:
+        wsi = CuImage(str(wsi_path))
+        slide_w = slide_h = None
+        if hasattr(wsi, 'get_width') and hasattr(wsi, 'get_height'):
+            try:
+                slide_w = int(wsi.get_width())
+                slide_h = int(wsi.get_height())
+            except Exception:
+                slide_w = slide_h = None
+        if slide_w is None and hasattr(wsi, 'width') and hasattr(wsi, 'height'):
+            try:
+                slide_w = int(wsi.width)
+                slide_h = int(wsi.height)
+            except Exception:
+                slide_w = slide_h = None
+        if slide_w is None and hasattr(wsi, 'shape'):
+            try:
+                sh = wsi.shape
+                if len(sh) >= 2:
+                    slide_h = int(sh[0])
+                    slide_w = int(sh[1])
+            except Exception:
+                slide_w = slide_h = None
+        if slide_w is None and hasattr(wsi, 'get_dimensions'):
+            try:
+                dims = wsi.get_dimensions()
+                if isinstance(dims, (tuple, list)) and len(dims) >= 2:
+                    slide_w = int(dims[0])
+                    slide_h = int(dims[1])
+            except Exception:
+                slide_w = slide_h = None
+        if slide_w is None and hasattr(wsi, 'size'):
+            try:
+                s = wsi.size
+                if isinstance(s, (tuple, list)) and len(s) >= 2:
+                    slide_w = int(s[0])
+                    slide_h = int(s[1])
+            except Exception:
+                slide_w = slide_h = None
+        if slide_w is None or slide_h is None:
+            raise AttributeError(f"Could not determine CuImage dimensions for {wsi_path}")
+    else:
+        import openslide
+        wsi = openslide.OpenSlide(str(wsi_path))
+        slide_w, slide_h = wsi.dimensions
+
+    # Build mask from XML polygons
+    polygons = parse_xml_lxml(xml_path)
+    if not polygons:
+        return None
+
+    mask = np.zeros((slide_h, slide_w), dtype=np.uint8)
+    for item in polygons:
+        poly = item['polygon']
+        poly_arr = np.array(poly, dtype=np.int32)
+        cv2.fillPoly(mask, [poly_arr], color=255)
+
+    return mask.astype(np.uint8)
 

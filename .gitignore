@@ -14,5 +14,6 @@
 *.txt
 *.sums
 *.xlsx
+*.png
 data/
 __pycache__/
