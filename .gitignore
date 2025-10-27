@@ -1,3 +1,8 @@
+# Ignore common data and cache files
+.idea/
+.ipynb_checkpoints/
+.virtual_documents/
+.vscode/
 *.tar
 *.tar.gz
 *.tar.bz2
