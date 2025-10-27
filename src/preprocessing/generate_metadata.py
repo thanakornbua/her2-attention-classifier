@@ -24,8 +24,18 @@ def _gather_files(dir_path: Path, exts: List[str]) -> List[Path]:
 
 
 def _index_by_stem(paths: List[Path]) -> Dict[str, Path]:
-    """Create a dictionary mapping filename stems to paths."""
-    return {p.stem: p for p in paths}
+    """Create a dictionary mapping filename stems to paths.
+
+    Matching key: use only the portion before the first '.' in the stem.
+    This ensures files like 'sample.v1.svs' and annotations 'sample.v1.xml'
+    are matched by the base 'sample'.
+    """
+    index: Dict[str, Path] = {}
+    for p in paths:
+        stem = p.stem
+        key = stem.split(".", 1)[0]  # use only part before first dot
+        index[key] = p
+    return index
 
 
 def discover_for_source(base_dir: Path, source: str) -> List[dict]:
@@ -44,11 +54,11 @@ def discover_for_source(base_dir: Path, source: str) -> List[dict]:
     for stem, wsi_path in tqdm(wsi_by_stem.items(), desc=f"Processing {source}", leave=False):
         ann_path = ann_by_stem.get(stem)
         rows.append({
-            "path": str(wsi_path),
+            "wsi_path": str(wsi_path),
             "slide_id": stem,
             "slide_name": wsi_path.name,
             "annotation_name": ann_path.name if ann_path else "",
-            "annotation_dir": str(ann_path.parent) if ann_path else "",
+            "annotation_path": str(ann_path) if ann_path else "",
         })
 
     return rows
@@ -62,15 +72,15 @@ def write_csv(rows: List[dict], out_path: Path, base_dir: Optional[Path] = None)
         base_dir: If provided, convert absolute paths to be relative to this directory
     """
     out_path.parent.mkdir(parents=True, exist_ok=True)
-    fieldnames = ["path", "slide_id", "slide_name", "annotation_name", "annotation_dir"]
+    fieldnames = ["wsi_path", "slide_id", "slide_name", "annotation_name", "annotation_path"]
     
-    # Convert absolute paths to relative if base_dir is provided
+    # Convert wsi_path and annotation_path to relative if base_dir is provided
     if base_dir:
         base_dir = base_dir.resolve()
         processed_rows = []
         for r in tqdm(rows, desc="Converting paths", leave=False):
             row_copy = r.copy()
-            for key in ["path", "annotation_dir"]:
+            for key in ["wsi_path", "annotation_path"]:
                 if row_copy.get(key):
                     try:
                         row_copy[key] = str(Path(row_copy[key]).relative_to(base_dir))
@@ -100,9 +110,10 @@ def discover_wsi(base_dir: Union[str, Path], sources: Union[str, List[str]],
         rows = discover_for_source(base_dir, src)
         all_rows.extend(rows)
     
-    relative_base = Path.cwd() if relative_paths else None
+    # Use main.ipynb location as base for relative paths
+    main_ipynb_path = Path("/media/thanakornbuath/Phone SSD/her2-attention-classifier/main.ipynb")
+    relative_base = main_ipynb_path.parent if relative_paths else None
     
     output_path_obj = Path(output_path)
     write_csv(all_rows, output_path_obj, base_dir=relative_base)
-    print(f"✓ Saved {len(all_rows)} slides to {output_path}")
     return output_path_obj.resolve()
