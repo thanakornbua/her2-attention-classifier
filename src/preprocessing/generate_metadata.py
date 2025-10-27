@@ -1,151 +1,108 @@
-"""Generate metadata CSV from WSI files and annotations for HER2 classification."""
+from __future__ import annotations
 
-import re
-import pandas as pd
 from pathlib import Path
+import csv
+from typing import List, Dict, Optional, Union
 from tqdm import tqdm
 
-try:
-    import openslide
-    OPENSLIDE_AVAILABLE = True
-except ImportError:
-    OPENSLIDE_AVAILABLE = False
 
-
-def generate_metadata(wsi_dir, annotation_dir=None, output_csv='metadata.csv', 
-                     label_file=None, wsi_extensions=None):
-    """
-    Generate metadata CSV from WSI files.
-    
-    Args:
-        wsi_dir: Directory with WSI files
-        annotation_dir: Directory with annotation files (optional)
-        output_csv: Output CSV path
-        label_file: CSV with slide_id,label columns
-        wsi_extensions: WSI file extensions (default: .svs, .tif, .ndpi, .mrxs)
-    
-    Returns:
-        DataFrame with columns: slide_id, filename, wsi_path, label, width, height, 
-                               level_count, annotation_path, file_size_mb, valid
-    """
-    if wsi_extensions is None:
-        wsi_extensions = ['.svs', '.tif', '.tiff', '.ndpi', '.mrxs']
-    
-    wsi_dir = Path(wsi_dir)
-    if not wsi_dir.exists():
-        raise FileNotFoundError(f"WSI directory not found: {wsi_dir}")
-    
-    # Find WSI files
-    wsi_files = []
-    for ext in wsi_extensions:
-        wsi_files.extend(wsi_dir.rglob(f"*{ext}"))
-        wsi_files.extend(wsi_dir.rglob(f"*{ext.upper()}"))
-    wsi_files = sorted(set(wsi_files))
-    
-    if not wsi_files:
-        raise ValueError(f"No WSI files found in {wsi_dir}")
-    
-    # Load labels and annotations
-    labels = _load_labels(label_file) if label_file else {}
-    annotations = _find_annotations(annotation_dir) if annotation_dir else {}
-    
-    # Process each WSI
-    metadata_list = []
-    for wsi_path in tqdm(wsi_files, desc="Processing WSIs"):
-        slide_id = wsi_path.stem
-        metadata = {
-            'slide_id': slide_id,
-            'filename': wsi_path.name,
-            'wsi_path': str(wsi_path.absolute()),
-            'label': labels.get(slide_id),
-            'width': None,
-            'height': None,
-            'level_count': None,
-            'annotation_path': annotations.get(slide_id),
-            'file_size_mb': round(wsi_path.stat().st_size / (1024**2), 2),
-            'valid': False
-        }
-        
-        if OPENSLIDE_AVAILABLE:
-            try:
-                slide = openslide.open_slide(str(wsi_path))
-                metadata['width'], metadata['height'] = slide.dimensions
-                metadata['level_count'] = slide.level_count
-                metadata['valid'] = True
-                slide.close()
-            except:
-                pass
-        else:
-            metadata['valid'] = True
-        
-        metadata_list.append(metadata)
-    
-    # Save CSV
-    df = pd.DataFrame(metadata_list)
-    Path(output_csv).parent.mkdir(parents=True, exist_ok=True)
-    df.to_csv(output_csv, index=False)
-    
-    print(f"✅ Saved {len(df)} slides to {output_csv}")
-    print(f"   Valid: {df['valid'].sum()} | With labels: {df['label'].notna().sum()}")
-    return df
-
-
-def _load_labels(label_file):
-    """Load labels from CSV or TXT file with flexible column detection."""
-    label_file = Path(label_file)
-    if not label_file.exists():
-        return {}
-    
-    labels = {}
-    
-    # Handle CSV files
-    if label_file.suffix.lower() == '.csv':
-        df = pd.read_csv(label_file)
-        # Auto-detect columns (supports variations in naming)
-        id_col = next((c for c in df.columns if c.lower() in ['slide_id', 'id', 'filename', 'slide', 'name']), df.columns[0])
-        label_col = next((c for c in df.columns if c.lower() in ['label', 'class', 'grade', 'score', 'her2']), df.columns[1])
-        
-        for _, row in df.iterrows():
-            slide_id = Path(str(row[id_col])).stem
-            labels[slide_id] = row[label_col]
-    
-    # Handle plain text files (tab/space/comma separated)
-    else:
-        with open(label_file, 'r') as f:
-            for line in f:
-                line = line.strip()
-                if line and not line.startswith('#'):
-                    parts = re.split(r'[,\t\s]+', line, maxsplit=1)
-                    if len(parts) == 2:
-                        slide_id = Path(parts[0]).stem
-                        labels[slide_id] = parts[1]
-    
-    return labels
-
-
-def _find_annotations(annotation_dir):
-    """Find annotation files and map by slide_id (supports XML, JSON, masks)."""
-    annotation_dir = Path(annotation_dir)
-    if not annotation_dir.exists():
-        return {}
-    
-    # Support multiple annotation formats
-    exts = ['.xml', '.json', '.txt', '.png', '.tif', '.tiff', '.npy']
+def _gather_files(dir_path: Path, exts: List[str]) -> List[Path]:
+    """Find all files with given extensions in directory."""
+    if not dir_path.exists():
+        return []
     files = []
     for ext in exts:
-        files.extend(annotation_dir.rglob(f"*{ext}"))
-        files.extend(annotation_dir.rglob(f"*{ext.upper()}"))  # Case-insensitive
-    
-    return {f.stem: str(f.absolute()) for f in files}
+        files += list(dir_path.rglob(ext))
+    seen = set()
+    unique = []
+    for p in files:
+        ap = p.resolve()
+        if ap not in seen:
+            seen.add(ap)
+            unique.append(ap)
+    return sorted(unique)
 
 
-if __name__ == "__main__":
-    import argparse
-    parser = argparse.ArgumentParser(description="Generate metadata CSV from WSI files")
-    parser.add_argument("wsi_dir", help="Directory with WSI files")
-    parser.add_argument("--annotation-dir", help="Directory with annotations")
-    parser.add_argument("-o", "--output", default="metadata.csv", help="Output CSV")
-    parser.add_argument("--label-file", help="CSV with slide_id,label")
-    args = parser.parse_args()
+def _index_by_stem(paths: List[Path]) -> Dict[str, Path]:
+    """Create a dictionary mapping filename stems to paths."""
+    return {p.stem: p for p in paths}
+
+
+def discover_for_source(base_dir: Path, source: str) -> List[dict]:
+    """Discover WSI and annotation pairs for a single source."""
+    source_dir = base_dir / source
+    svs_dir = source_dir / "SVS"
+    ann_dir = next((d for d in [source_dir / "Annotations", source_dir / "Annotation"] if d.exists()), source_dir / "Annotations")
+
+    wsi_files = _gather_files(svs_dir, ["*.svs", "*.SVS"])
+    ann_files = _gather_files(ann_dir, ["*.xml", "*.XML"])
+
+    wsi_by_stem = _index_by_stem(wsi_files)
+    ann_by_stem = _index_by_stem(ann_files)
+
+    rows = []
+    for stem, wsi_path in tqdm(wsi_by_stem.items(), desc=f"Processing {source}", leave=False):
+        ann_path = ann_by_stem.get(stem)
+        rows.append({
+            "path": str(wsi_path),
+            "slide_id": stem,
+            "slide_name": wsi_path.name,
+            "annotation_name": ann_path.name if ann_path else "",
+            "annotation_dir": str(ann_path.parent) if ann_path else "",
+        })
+
+    return rows
+
+
+def write_csv(rows: List[dict], out_path: Path, base_dir: Optional[Path] = None) -> None:
+    """    
+    Args:
+        rows: List of dictionaries with slide information
+        out_path: Output CSV file path
+        base_dir: If provided, convert absolute paths to be relative to this directory
+    """
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    fieldnames = ["path", "slide_id", "slide_name", "annotation_name", "annotation_dir"]
     
-    generate_metadata(args.wsi_dir, args.annotation_dir, args.output, args.label_file)
+    # Convert absolute paths to relative if base_dir is provided
+    if base_dir:
+        base_dir = base_dir.resolve()
+        processed_rows = []
+        for r in tqdm(rows, desc="Converting paths", leave=False):
+            row_copy = r.copy()
+            for key in ["path", "annotation_dir"]:
+                if row_copy.get(key):
+                    try:
+                        row_copy[key] = str(Path(row_copy[key]).relative_to(base_dir))
+                    except ValueError:
+                        pass
+            processed_rows.append(row_copy)
+        rows = processed_rows
+    
+    with out_path.open("w", newline="") as f:
+        writer = csv.DictWriter(f, fieldnames=fieldnames)
+        writer.writeheader()
+        for r in rows:
+            writer.writerow({k: r.get(k, "") for k in fieldnames})
+
+
+def discover_wsi(base_dir: Union[str, Path], sources: Union[str, List[str]],
+                 output_path: Union[str, Path] = "outputs/wsi_index.csv",
+                 relative_paths: bool = True) -> Path:
+    
+    base_dir = Path(base_dir).expanduser().resolve()
+    
+    if isinstance(sources, str):
+        sources = [sources]
+    
+    all_rows = []
+    for src in tqdm(sources, desc="Processing sources"):
+        rows = discover_for_source(base_dir, src)
+        all_rows.extend(rows)
+    
+    relative_base = Path.cwd() if relative_paths else None
+    
+    output_path_obj = Path(output_path)
+    write_csv(all_rows, output_path_obj, base_dir=relative_base)
+    print(f"✓ Saved {len(all_rows)} slides to {output_path}")
+    return output_path_obj.resolve()
