@@ -1,6 +1,4 @@
 import numpy as np
-import cv2
-from typing import Optional, Tuple
 
 
 def macenko_normalization(image, target_concentrations=None, target_stains=None):
@@ -47,8 +45,7 @@ def macenko_normalization(image, target_concentrations=None, target_stains=None)
     
     # Reconstruct image with target stains using SOURCE concentrations
     # Keep the tissue structure (concentrations) but change color (stains)
-    h, w, c = image_od.shape
-    normalized_od = (target_stains @ concentrations_source).T.reshape(h, w, c)
+    normalized_od = (target_stains @ concentrations_source).T.reshape(image_od.shape)
     normalized_image = od_to_rgb(normalized_od)
     
     # Ensure output matches input dtype and range
@@ -67,18 +64,9 @@ def rgb_to_od(image):
     
     Returns:
         np.ndarray: Optical density values (H x W x 3)
-    
-    Practical notes:
-        - Adds epsilon to avoid log(0)
-        - Handles white/background pixels robustly
     """
-    # Avoid log(0) by adding small epsilon
-    epsilon = 1e-6
-    image = np.maximum(image, epsilon)
-    
-    # Convert to optical density: OD = -log10(I/255)
-    od = -np.log10(image / 255.0 + epsilon)
-    return od
+    # Convert to optical density: OD = -log10(I/255), avoiding log(0)
+    return -np.log10((image + 1.0) / 256.0)
 
 
 def od_to_rgb(od):
@@ -93,8 +81,7 @@ def od_to_rgb(od):
     Returns:
         np.ndarray: RGB image, float32 [0-255]
     """
-    rgb = 255.0 * np.power(10, -od)
-    return rgb
+    return 255.0 * np.power(10.0, -od)
 
 
 def get_stain_matrix(image_od, alpha=1, beta=0.15):
@@ -118,12 +105,10 @@ def get_stain_matrix(image_od, alpha=1, beta=0.15):
         - Alpha percentile handles outliers robustly
     """
     # Reshape to (N_pixels, 3)
-    h, w, c = image_od.shape
     od_flat = image_od.reshape(-1, 3)
     
     # Remove background pixels (low OD = white/unstained)
-    od_threshold = beta
-    tissue_mask = np.all(od_flat > od_threshold, axis=1)
+    tissue_mask = (od_flat > beta).all(axis=1)
     od_tissue = od_flat[tissue_mask]
     
     # Handle edge case: no tissue pixels
@@ -132,24 +117,26 @@ def get_stain_matrix(image_od, alpha=1, beta=0.15):
         stain_matrix = np.array([[0.644, 0.716], 
                                   [0.092, 0.954], 
                                   [0.759, 0.650]])
-        concentrations = np.zeros((2, h * w))
+        concentrations = np.zeros((2, od_flat.shape[0]))
         return stain_matrix, concentrations
     
     # Singular Value Decomposition to find principal stain directions
-    _, _, V = np.linalg.svd(od_tissue.T, full_matrices=False)
-    V = V[:2, :]  # Keep top 2 components (H and E)
+    # od_tissue.T is (3, N), so U is (3, 3) - the left singular vectors
+    U, _, _ = np.linalg.svd(od_tissue.T, full_matrices=False)
+    U = U[:, :2]  # (3, 2) - the two principal directions in 3D OD space
     
-    # Project tissue OD onto plane spanned by top 2 eigenvectors
-    projected = od_tissue @ V.T
+    # Project tissue OD onto this 2D plane
+    projected = od_tissue @ U  # (N, 3) @ (3, 2) = (N, 2)
     
     # Find extreme angles (robust to outliers using percentiles)
     angles = np.arctan2(projected[:, 1], projected[:, 0])
     min_angle = np.percentile(angles, alpha)
     max_angle = np.percentile(angles, 100 - alpha)
     
-    # Compute stain vectors from extreme angles
-    v1 = np.cos(min_angle) * V[0, :] + np.sin(min_angle) * V[1, :]
-    v2 = np.cos(max_angle) * V[0, :] + np.sin(max_angle) * V[1, :]
+    # Compute stain vectors from extreme angles in the 2D projected space
+    # Then map back to 3D OD space using U basis
+    v1 = np.cos(min_angle) * U[:, 0] + np.sin(min_angle) * U[:, 1]
+    v2 = np.cos(max_angle) * U[:, 0] + np.sin(max_angle) * U[:, 1]
     
     # Ensure H (hematoxylin) has higher OD in blue channel
     if v1[2] > v2[2]:
