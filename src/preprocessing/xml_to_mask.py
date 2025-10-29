@@ -1,9 +1,9 @@
 import numpy as np
+import gc
 try:
     from lxml import etree as ET
 except Exception:
     import xml.etree.ElementTree as ET
-import gc
 
 USE_CUCIM = False
 try:
