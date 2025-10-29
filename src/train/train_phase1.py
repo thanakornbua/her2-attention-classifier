@@ -41,6 +41,7 @@ import torch.optim as optim
 from torch.utils.data import Dataset, DataLoader
 import torchvision.transforms as T
 import torchvision.models as models
+import gc
 
 from sklearn.metrics import roc_auc_score, accuracy_score, confusion_matrix, classification_report
 
@@ -137,18 +138,25 @@ def train_one_epoch(model, loader, criterion, optimizer, device):
     model.train()
     running_loss = 0.0
     all_targets, all_probs = [], []
-    for imgs, labels, _ in loader:
-        imgs = imgs.to(device)
-        labels = labels.to(device)
-        optimizer.zero_grad()
+    for batch_idx, (imgs, labels, _) in enumerate(loader):
+        imgs = imgs.to(device, non_blocking=True)
+        labels = labels.to(device, non_blocking=True)
+        optimizer.zero_grad(set_to_none=True)  # More memory efficient than zero_grad()
         logits = model(imgs)
         loss = criterion(logits, labels)
         loss.backward()
         optimizer.step()
         running_loss += loss.item() * imgs.size(0)
-        probs = torch.softmax(logits.detach(), dim=1)[:, 1].cpu().numpy()
+        # Detach and move to CPU immediately to free GPU memory
+        with torch.no_grad():
+            probs = torch.softmax(logits, dim=1)[:, 1].cpu().numpy()
         all_probs.extend(probs.tolist())
         all_targets.extend(labels.cpu().numpy().tolist())
+        # Free GPU memory explicitly
+        del imgs, labels, logits, loss, probs
+        # Periodic garbage collection to prevent memory fragmentation
+        if batch_idx % 50 == 0:
+            torch.cuda.empty_cache()
     epoch_loss = running_loss / len(loader.dataset)
     try:
         epoch_auc = roc_auc_score(all_targets, all_probs)
@@ -164,15 +172,20 @@ def evaluate(model, loader, criterion, device):
     running_loss = 0.0
     all_targets, all_probs = [], []
     with torch.no_grad():
-        for imgs, labels, _ in loader:
-            imgs = imgs.to(device)
-            labels = labels.to(device)
+        for batch_idx, (imgs, labels, _) in enumerate(loader):
+            imgs = imgs.to(device, non_blocking=True)
+            labels = labels.to(device, non_blocking=True)
             logits = model(imgs)
             loss = criterion(logits, labels)
             running_loss += loss.item() * imgs.size(0)
             probs = torch.softmax(logits, dim=1)[:, 1].cpu().numpy()
             all_probs.extend(probs.tolist())
             all_targets.extend(labels.cpu().numpy().tolist())
+            # Free GPU memory explicitly
+            del imgs, labels, logits, loss, probs
+            # Periodic memory cleanup
+            if batch_idx % 50 == 0:
+                torch.cuda.empty_cache()
     epoch_loss = running_loss / len(loader.dataset)
     try:
         epoch_auc = roc_auc_score(all_targets, all_probs)
@@ -310,6 +323,9 @@ def train_phase1(config: Dict[str, Any]):
             f"val: loss={val_log['loss']:.4f} auc={val_log['auc']:.4f} acc={val_log['acc']:.4f} | "
             f"{'*' if improved else ''} ({dur:.1f}s)"
         )
+        # Clean up after each epoch to prevent memory accumulation
+        gc.collect()
+        torch.cuda.empty_cache()
 
     # Save logs, confusion matrix, and report for final val run
     save_metrics_csv_json(history, best_metrics, logs_dir)

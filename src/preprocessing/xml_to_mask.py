@@ -3,6 +3,7 @@ try:
     from lxml import etree as ET
 except Exception:
     import xml.etree.ElementTree as ET
+import gc
 
 USE_CUCIM = False
 try:
@@ -135,17 +136,20 @@ def process_slide(
     polygons = parse_xml_lxml(xml_path)
     if not polygons:
         print(f"No polygons found in {xml_path}")
+        del mask
+        # Close WSI reader properly
         try:
-            del wsi_image
+            if hasattr(wsi, 'close'):
+                wsi.close()
         except Exception:
             pass
-        del mask
         return None
 
     for item in polygons:
         poly = item['polygon']
         poly_arr = np.array(poly, dtype=np.int32)
         cv2.fillPoly(mask, [poly_arr], color=255)
+        del poly_arr  # Free immediately after use
 
     if mask.dtype != np.uint8:
         mask = mask.astype(np.uint8)
@@ -216,13 +220,25 @@ def process_slide(
             if wsi_with_mask_path:
                 _save_result(result, wsi_with_mask_path)
             result_overlay = result
-            del g_result, g_mask, g_img, result
-            del wsi_image, mask
+            # Clean up all intermediate GPU and CPU arrays
+            del g_result, g_mask, g_img
+            del wsi_image, mask_for_cuda, result
+            del mask
+            # Close WSI reader
+            try:
+                if hasattr(wsi, 'close'):
+                    wsi.close()
+            except Exception:
+                pass
+            gc.collect()
             return wsi_with_mask_path if wsi_with_mask_path else result_overlay
         except Exception as e:
             print(f"GPU full-image path failed ({e}), falling back to tiled processing")
+            # Clean up any partially allocated resources
+            gc.collect()
 
     overlay = np.zeros((slide_h, slide_w, 3), dtype=np.uint8)
+    chunk_count = 0
     if use_cuda:
         for y in range(0, slide_h, chunk_size):
             h = min(chunk_size, slide_h - y)
@@ -252,6 +268,10 @@ def process_slide(
                     overlay[y:y + h, x:x + w] = res
                     del res
                 del region, mask_patch
+                chunk_count += 1
+                # Periodic garbage collection for large WSI
+                if chunk_count % 50 == 0:
+                    gc.collect()
     else:
         for y in range(0, slide_h, chunk_size):
             h = min(chunk_size, slide_h - y)
@@ -269,14 +289,25 @@ def process_slide(
                 res = cv2.bitwise_and(region, region, mask=mask_patch)
                 overlay[y:y + h, x:x + w] = res
                 del region, mask_patch, res
+                chunk_count += 1
+                # Periodic garbage collection for large WSI
+                if chunk_count % 50 == 0:
+                    gc.collect()
 
     if wsi_with_mask_path:
         _save_result(overlay, wsi_with_mask_path)
     result_overlay = overlay
 
-    # wsi_image may not exist if we avoided full-image path; ignore
+    # Clean up all resources
     del mask
     del overlay
+    # Close WSI reader
+    try:
+        if hasattr(wsi, 'close'):
+            wsi.close()
+    except Exception:
+        pass
+    gc.collect()
 
     return wsi_with_mask_path if wsi_with_mask_path else result_overlay
 
@@ -337,6 +368,12 @@ def get_mask(xml_path, wsi_path):
     # Build mask from XML polygons
     polygons = parse_xml_lxml(xml_path)
     if not polygons:
+        # Close WSI reader before returning
+        try:
+            if hasattr(wsi, 'close'):
+                wsi.close()
+        except Exception:
+            pass
         return None
 
     mask = np.zeros((slide_h, slide_w), dtype=np.uint8)
@@ -344,6 +381,14 @@ def get_mask(xml_path, wsi_path):
         poly = item['polygon']
         poly_arr = np.array(poly, dtype=np.int32)
         cv2.fillPoly(mask, [poly_arr], color=255)
+        del poly_arr  # Free immediately after use
+
+    # Close WSI reader
+    try:
+        if hasattr(wsi, 'close'):
+            wsi.close()
+    except Exception:
+        pass
 
     return mask.astype(np.uint8)
 
