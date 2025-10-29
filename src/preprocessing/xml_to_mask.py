@@ -222,7 +222,7 @@ def process_slide(
             result_overlay = result
             # Clean up all intermediate GPU and CPU arrays
             del g_result, g_mask, g_img
-            del wsi_image, mask_for_cuda, result
+            del wsi_image, mask_for_cuda
             del mask
             # Close WSI reader
             try:
