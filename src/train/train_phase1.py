@@ -113,19 +113,16 @@ class PatchDataset(Dataset):
         img = Image.open(path).convert('RGB')
         # Apply transforms if needed
         if self.transform:
-            img_transformed = self.transform(img)
-            # Close original image to free memory after transforms create a tensor
-            # Transforms typically return torch.Tensor, check explicitly
-            if isinstance(img_transformed, torch.Tensor):
+            try:
+                img_transformed = self.transform(img)
+                return img_transformed, label, path
+            finally:
                 try:
                     img.close()
                 except (AttributeError, RuntimeError):
                     # Image already closed or doesn't support close
                     pass
-            return img_transformed, label, path
         return img, label, path
-
-
 def build_resnet50(pretrained: bool = True, num_classes: int = 2):
     try:
         # Newer torchvision API with Weights enums
