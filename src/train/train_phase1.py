@@ -114,12 +114,15 @@ class PatchDataset(Dataset):
         # Apply transforms if needed
         if self.transform:
             img_transformed = self.transform(img)
-            # Close original image to free memory if transforms create a new tensor
-            if hasattr(img_transformed, 'shape'):  # It's a tensor now
-                try:
+            # Close original image to free memory after transforms create a tensor
+            # Transforms typically return torch.Tensor, check explicitly
+            try:
+                import torch
+                if isinstance(img_transformed, torch.Tensor):
                     img.close()
-                except Exception:
-                    pass
+            except (AttributeError, RuntimeError):
+                # Image already closed or doesn't support close
+                pass
             return img_transformed, label, path
         return img, label, path
 
