@@ -24,11 +24,13 @@ class WSIReader:
       require multiple pyramid levels, they should use OpenSlide directly.
     - For CuImage backend, read_region returns a numpy array which is
       converted to a PIL.Image to match OpenSlide behavior.
+    - Supports context manager protocol for proper resource cleanup.
     """
     def __init__(self, path: Path, backend: str, reader):
         self.path = Path(path)
         self.backend = backend
         self._r = reader
+        self._closed = False
 
         if backend == 'cucim':
             # CuImage exposes dimensions differently across versions.
@@ -93,8 +95,35 @@ class WSIReader:
             except Exception:
                 self.level_downsamples = [1.0 for _ in self.level_dimensions]
 
+    def __enter__(self):
+        """Context manager entry."""
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        """Context manager exit - close resources."""
+        self.close()
+        return False
+
+    def close(self):
+        """Close the underlying WSI reader and free resources."""
+        if self._closed:
+            return
+        try:
+            if hasattr(self._r, 'close'):
+                self._r.close()
+        except Exception:
+            pass
+        self._closed = True
+        self._r = None
+
+    def __del__(self):
+        """Destructor - ensure resources are freed."""
+        self.close()
+
     def read_region(self, location: Tuple[int, int], level: int, size: Tuple[int, int]):
         """Read a region and return a PIL.Image (like OpenSlide.read_region)."""
+        if self._closed:
+            raise RuntimeError("Cannot read from closed WSIReader")
         x, y = location
         w, h = size
         if self.backend == 'cucim':
