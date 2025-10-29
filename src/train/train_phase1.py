@@ -111,8 +111,16 @@ class PatchDataset(Dataset):
         path = row[self.path_col]
         label = int(row[self.label_col])
         img = Image.open(path).convert('RGB')
+        # Apply transforms if needed
         if self.transform:
-            img = self.transform(img)
+            img_transformed = self.transform(img)
+            # Close original image to free memory if transforms create a new tensor
+            if hasattr(img_transformed, 'shape'):  # It's a tensor now
+                try:
+                    img.close()
+                except Exception:
+                    pass
+            return img_transformed, label, path
         return img, label, path
 
 
