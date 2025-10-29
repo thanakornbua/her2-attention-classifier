@@ -83,8 +83,10 @@ def extract_files(source_dir, svs_output_dir, log_output_dir):
                         dest_path = os.path.join(log_output_dir, dir_name)
                         if os.path.exists(dest_path):
                             shutil.rmtree(dest_path)
+                        # Count files before moving
+                        file_count = len(os.listdir(log_dir_path)) if os.path.exists(log_dir_path) else 0
                         shutil.move(log_dir_path, log_output_dir)
-                        pbar.update(len(os.listdir(log_dir_path)) if os.path.exists(log_dir_path) else 0)
+                        pbar.update(file_count)
                     except (OSError, shutil.Error) as e:
                         print(f"Error moving directory {log_dir_path}: {e}")
 
