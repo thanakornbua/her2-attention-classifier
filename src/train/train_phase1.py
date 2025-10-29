@@ -20,6 +20,8 @@ Expected config keys (with defaults):
     - path_col: str, name of image path column (default 'path')
     - save_best_by: 'auc' or 'acc'
     - seed: int, random seed (default 42)
+Notice
+	- Do not run this file as multithreaded job. If wish to do so, Please ensure completeness of loops first.
 """
 
 from __future__ import annotations
@@ -114,7 +116,7 @@ class PatchDataset(Dataset):
         # Apply transforms if needed
         if self.transform:
             try:
-                img_transformed = self.transform(img)
+                img_transformed = self.transform(img) # Might cause error here in case of if image was closed before tensor transformation concludes.
                 return img_transformed, label, path
             finally:
                 try:
