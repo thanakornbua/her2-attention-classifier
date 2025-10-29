@@ -2,6 +2,7 @@ import os
 import numpy as np
 from typing import List, Dict, Optional
 from PIL import Image
+import gc
 
 
 def extract_patches(
@@ -64,6 +65,7 @@ def extract_patches(
         downsample_x = level0_width / mask_width
         downsample_y = level0_height / mask_height
 
+    patch_count = 0
     for y in range(0, height - size + 1, stride):
         for x in range(0, width - size + 1, stride):
             x_level0 = int(x * level_downsample)
@@ -107,8 +109,17 @@ def extract_patches(
                     # PIL will infer format from extension; pass explicit format for clarity
                     patch.save(out_path)
                     entry['path'] = out_path
+                    # Close the image to free memory when saving
+                    patch.close()
+                    entry['patch'] = None  # Don't keep in memory if saved
                 except Exception:
                     # if saving fails, still return the patch object
                     entry['path'] = None
             patches.append(entry)
+            patch_count += 1
+            
+            # Periodic garbage collection to prevent memory buildup with large WSI
+            if patch_count % 100 == 0:
+                gc.collect()
+                
     return patches

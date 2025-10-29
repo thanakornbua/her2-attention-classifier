@@ -27,14 +27,16 @@ def macenko_normalization(image, target_concentrations=None, target_stains=None)
     """
     # Store original dtype for return
     original_dtype = image.dtype
-    image = image.astype(np.float32)
     
     # Handle edge cases
     if image.size == 0:
-        return image.astype(original_dtype)
+        return image
+    
+    # Work with float32 internally
+    image_float = image.astype(np.float32) if image.dtype != np.float32 else image
     
     # Convert RGB to optical density (OD)
-    image_od = rgb_to_od(image)
+    image_od = rgb_to_od(image_float)
     
     # Extract stain matrix and concentrations from source image
     stain_matrix_source, concentrations_source = get_stain_matrix(image_od)
@@ -48,9 +50,17 @@ def macenko_normalization(image, target_concentrations=None, target_stains=None)
     normalized_od = (target_stains @ concentrations_source).T.reshape(image_od.shape)
     normalized_image = od_to_rgb(normalized_od)
     
+    # Free intermediate arrays
+    del image_od, stain_matrix_source, concentrations_source, normalized_od
+    
     # Ensure output matches input dtype and range
     normalized_image = np.clip(normalized_image, 0, 255)
-    return normalized_image.astype(original_dtype)
+    result = normalized_image.astype(original_dtype)
+    
+    # Free normalized_image before return
+    del normalized_image
+    
+    return result
 
 
 def rgb_to_od(image):

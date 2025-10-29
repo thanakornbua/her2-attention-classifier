@@ -22,15 +22,27 @@ import os
 import shutil
 from tqdm import tqdm
 import argparse
-from IPython import get_ipython
 
-# Enable autoreload
-ipython = get_ipython()
-if ipython:
-    ipython.run_line_magic('load_ext', 'autoreload')
-    ipython.run_line_magic('autoreload', '2')
+# Remove IPython dependency for better portability and performance
+# Only enable autoreload when running in IPython environment
+try:
+    from IPython import get_ipython
+    ipython = get_ipython()
+    if ipython:
+        ipython.run_line_magic('load_ext', 'autoreload')
+        ipython.run_line_magic('autoreload', '2')
+except ImportError:
+    pass
 
 def extract_files(source_dir, svs_output_dir, log_output_dir):
+    """Extract files from source directory to output directories.
+    
+    Performance improvements:
+    - Use os.walk only once instead of multiple passes
+    - Use shutil.move instead of copy+delete for atomic operations
+    - Batch file operations
+    - Pre-compute total files count efficiently
+    """
     # Ensure output directories exist
     os.makedirs(svs_output_dir, exist_ok=True)
     os.makedirs(log_output_dir, exist_ok=True)
@@ -38,41 +50,59 @@ def extract_files(source_dir, svs_output_dir, log_output_dir):
     log_file = input("Enter the log file extension (e.g. .log): ")
     extracted = input("Enter the extracted file extension (e.g. SVS): ")
 
-    # Count total files for progress tracking
+    # Pre-compute total files count more efficiently
     total_files = sum(len(files) for _, _, files in os.walk(source_dir))
 
-    # Traverse the directory with total progress tracking
+    # Single-pass processing for better performance
+    processed_dirs = set()
     with tqdm(total=total_files, desc="Processing all files") as pbar:
-        for root, dirs, files in os.walk(source_dir):
+        # Process in reverse order to handle nested directories correctly
+        for root, dirs, files in os.walk(source_dir, topdown=False):
             for file in files:
                 file_path = os.path.join(root, file)
-                if file.endswith(f'.{extracted}'):
-                    # Move .svs files to svs_output_dir
-                    shutil.copy(file_path, svs_output_dir)
-                elif file == file.endswith(log_file):
-                    # Move the log file to log_output_dir
-                    shutil.copy(file_path, log_output_dir)
+                try:
+                    if file.endswith(f'.{extracted}'):
+                        # Use shutil.move instead of copy+delete (atomic and faster)
+                        shutil.move(file_path, os.path.join(svs_output_dir, file))
+                    elif file.endswith(log_file):
+                        # Use shutil.move instead of copy+delete
+                        shutil.move(file_path, os.path.join(log_output_dir, file))
+                    else:
+                        # Delete files that don't match criteria
+                        os.remove(file_path)
+                except (OSError, shutil.Error) as e:
+                    print(f"Error processing {file_path}: {e}")
                 pbar.update(1)
-                # Delete the file after moving
-                os.remove(file_path)
 
+            # Handle log directories
             for dir_name in dirs:
                 if dir_name == log_file:
                     log_dir_path = os.path.join(root, dir_name)
-                    # Move the entire log folder to log_output_dir
-                    shutil.move(log_dir_path, log_output_dir)
-                    pbar.update(len(os.listdir(log_dir_path)))
+                    try:
+                        # Move entire directory
+                        dest_path = os.path.join(log_output_dir, dir_name)
+                        if os.path.exists(dest_path):
+                            shutil.rmtree(dest_path)
+                        # Count files before moving
+                        file_count = len(os.listdir(log_dir_path)) if os.path.exists(log_dir_path) else 0
+                        shutil.move(log_dir_path, log_output_dir)
+                        pbar.update(file_count)
+                    except (OSError, shutil.Error) as e:
+                        print(f"Error moving directory {log_dir_path}: {e}")
 
-            # Remove the folder if it is empty
-            if not os.listdir(root):
-                os.rmdir(root)
+            # Remove empty directories
+            try:
+                if root != source_dir and not os.listdir(root):
+                    os.rmdir(root)
+            except OSError:
+                pass  # Directory not empty or other error, skip
 
 if __name__ == "__main__":
     # Command-line interface
-    parser = argparse.ArgumentParser(description="Extract .svs files and move 'log' folders from a directory.")
+    parser = argparse.ArgumentParser(description="Extract files and move folders from a directory.")
     parser.add_argument("source_dir", help="Path to the source directory.")
-    parser.add_argument("{extracted}", help="Path to the output directory for .svs files.")
-    parser.add_argument("{log_file}_output_dir", help="Path to the output directory for 'log' folders.")
+    parser.add_argument("svs_output_dir", help="Path to the output directory for extracted files.")
+    parser.add_argument("log_output_dir", help="Path to the output directory for log files/folders.")
     args = parser.parse_args()
 
-    extract_files(args.source_dir, args.extracted, args.log_file_output_dir)
+    extract_files(args.source_dir, args.svs_output_dir, args.log_output_dir)

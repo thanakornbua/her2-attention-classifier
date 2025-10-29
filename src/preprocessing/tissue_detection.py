@@ -1,6 +1,7 @@
 import numpy as np
 import cv2
 from typing import Tuple, Optional
+import gc
 
 
 def otsu_thresholding(wsi_slide, level: int = 2, return_mask: bool = True) -> np.ndarray:
@@ -42,16 +43,24 @@ def otsu_thresholding(wsi_slide, level: int = 2, return_mask: bool = True) -> np
     # Apply Otsu thresholding (automatic threshold selection)
     _, binary = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
     
+    # Free gray immediately
+    del gray
+    
     # Clean up noise with morphological operations
     kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5))
     binary = cv2.morphologyEx(binary, cv2.MORPH_OPEN, kernel)  # Remove small noise
     binary = cv2.morphologyEx(binary, cv2.MORPH_CLOSE, kernel)  # Fill small holes
     
+    # Free kernel
+    del kernel
+    
     if return_mask:
+        del thumb
         return binary
     else:
         # Apply mask to original image
         tissue = cv2.bitwise_and(thumb, thumb, mask=binary)
+        del thumb, binary
         return tissue
 
 
@@ -107,15 +116,23 @@ def HSV_filtering(wsi_slide, level: int = 2,
     # Create mask using HSV thresholds
     mask = cv2.inRange(hsv, lower_bound, upper_bound)
     
+    # Free hsv and bounds immediately
+    del hsv, lower_bound, upper_bound
+    
     # Clean up with morphological operations
     kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5))
     mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, kernel)
     mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, kernel)
     
+    # Free kernel
+    del kernel
+    
     if return_mask:
+        del thumb
         return mask
     else:
         tissue = cv2.bitwise_and(thumb, thumb, mask=mask)
+        del thumb, mask
         return tissue
 
 
