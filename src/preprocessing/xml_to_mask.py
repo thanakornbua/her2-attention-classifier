@@ -312,11 +312,17 @@ def process_slide(
     return wsi_with_mask_path if wsi_with_mask_path else result_overlay
 
 
-def get_mask(xml_path, wsi_path):
+def get_mask(xml_path, wsi_path, downsample_factor=8):
     """Generate a 2D uint8 binary mask (0/255) directly from XML polygons.
 
     This avoids building an RGB overlay and avoids reading the entire WSI
     image. Only the WSI dimensions are required to size the mask.
+    
+    Args:
+        xml_path: Path to XML annotation file
+        wsi_path: Path to WSI file
+        downsample_factor: Factor to downsample mask (default 8) to reduce memory.
+                          Higher = less memory but slightly less precision.
     """
     # Open WSI and robustly determine dimensions
     if USE_CUCIM:
@@ -376,12 +382,20 @@ def get_mask(xml_path, wsi_path):
             pass
         return None
 
-    mask = np.zeros((slide_h, slide_w), dtype=np.uint8)
+    # Downsample mask to reduce memory usage
+    # For 50000x50000 WSI with downsample=8: mask becomes 6250x6250 (only ~39MB instead of 2.5GB)
+    mask_w = int(slide_w / downsample_factor)
+    mask_h = int(slide_h / downsample_factor)
+    
+    mask = np.zeros((mask_h, mask_w), dtype=np.uint8)
+    
+    # Scale polygons to match downsampled mask
     for item in polygons:
         poly = item['polygon']
-        poly_arr = np.array(poly, dtype=np.int32)
+        poly_scaled = [(int(x / downsample_factor), int(y / downsample_factor)) for x, y in poly]
+        poly_arr = np.array(poly_scaled, dtype=np.int32)
         cv2.fillPoly(mask, [poly_arr], color=255)
-        del poly_arr  # Free immediately after use
+        del poly_arr, poly_scaled  # Free immediately after use
 
     # Close WSI reader
     try:
