@@ -15,6 +15,7 @@ def extract_patches(
     save_dir: Optional[str] = None,
     save_prefix: Optional[str] = None,
     save_format: str = 'png',
+    use_gpu: bool = False,
 ) -> List[Dict]:
     """
     Extract image patches from Whole Slide Images (WSI).
@@ -27,6 +28,10 @@ def extract_patches(
         stride: Step size between patch centers in pixels (default: 512)
         tissue_threshold: Minimum ratio of tissue/ROI pixels required in mask 
         level: Pyramid level to extract from (0 = highest resolution)
+        save_dir: Optional directory to save patches
+        save_prefix: Optional prefix for saved patch filenames
+        save_format: Image format for saving (default: 'png')
+        use_gpu: If True, request GPU memory from CuCIM (requires CuPy for processing)
     
     Returns:
         List of dictionaries, each containing:
@@ -87,11 +92,20 @@ def extract_patches(
                 if tissue_ratio < tissue_threshold:
                     continue
 
-            patch = wsi_slide.read_region(
-                location=(x_level0, y_level0),
-                level=level,
-                size=(size, size)
-            )
+            # Read patch from WSI, optionally on GPU (CuCIM backend only)
+            if use_gpu and hasattr(wsi_slide, 'backend') and wsi_slide.backend == 'cucim':
+                patch = wsi_slide.read_region(
+                    location=(x_level0, y_level0),
+                    level=level,
+                    size=(size, size),
+                    device='cuda'
+                )
+            else:
+                patch = wsi_slide.read_region(
+                    location=(x_level0, y_level0),
+                    level=level,
+                    size=(size, size)
+                )
             if patch.mode == 'RGBA':
                 patch = patch.convert('RGB')
             entry = {
