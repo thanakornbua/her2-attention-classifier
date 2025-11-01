@@ -15,5 +15,6 @@
 *.sums
 *.xlsx
 *.png
+*.log
 data/
 __pycache__/

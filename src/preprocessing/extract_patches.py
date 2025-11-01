@@ -1,6 +1,6 @@
 import os
 import numpy as np
-from typing import List, Dict, Optional
+from typing import List, Dict, Optional, Callable, Any
 from PIL import Image
 import gc
 
@@ -16,6 +16,7 @@ def extract_patches(
     save_prefix: Optional[str] = None,
     save_format: str = 'png',
     use_gpu: bool = False,
+    validator: Optional[Callable[[Image.Image, Dict[str, Any]], bool]] = None,
 ) -> List[Dict]:
     """
     Extract image patches from Whole Slide Images (WSI).
@@ -32,6 +33,8 @@ def extract_patches(
         save_prefix: Optional prefix for saved patch filenames
         save_format: Image format for saving (default: 'png')
         use_gpu: If True, request GPU memory from CuCIM (requires CuPy for processing)
+        validator: Optional callable that receives (patch, metadata) and returns True
+            if the patch should be kept. Returning False discards the patch.
     
     Returns:
         List of dictionaries, each containing:
@@ -70,9 +73,11 @@ def extract_patches(
         downsample_x = level0_width / mask_width
         downsample_y = level0_height / mask_height
 
-    patch_count = 0
+    attempt_count = 0
+    valid_patch_count = 0
     for y in range(0, height - size + 1, stride):
         for x in range(0, width - size + 1, stride):
+            attempt_count += 1
             x_level0 = int(x * level_downsample)
             y_level0 = int(y * level_downsample)
 
@@ -108,6 +113,27 @@ def extract_patches(
                 )
             if patch.mode == 'RGBA':
                 patch = patch.convert('RGB')
+            metadata = {
+                'x': x_level0,
+                'y': y_level0,
+                'level': level,
+                'attempt_index': attempt_count - 1,
+                'downsample': level_downsample,
+                'size': size,
+                'stride': stride,
+            }
+            if validator:
+                try:
+                    is_valid = validator(patch, metadata)
+                except Exception:
+                    is_valid = False
+                if not is_valid:
+                    # Release resources associated with the discarded patch
+                    try:
+                        patch.close()
+                    except Exception:
+                        pass
+                    continue
             entry = {
                 'patch': patch,
                 'x': x_level0,
@@ -115,7 +141,7 @@ def extract_patches(
                 'level': level
             }
             if do_save:
-                idx = len(patches)
+                idx = valid_patch_count
                 base = save_prefix if save_prefix else wsi_basename
                 fname = f"{base}_x{x_level0}_y{y_level0}_lv{level}_{idx:04d}.{save_format.lstrip('.')}"
                 out_path = os.path.join(save_dir, fname)
@@ -130,10 +156,10 @@ def extract_patches(
                     # if saving fails, still return the patch object
                     entry['path'] = None
             patches.append(entry)
-            patch_count += 1
-            
+            valid_patch_count += 1
+
             # Periodic garbage collection to prevent memory buildup with large WSI
-            if patch_count % 100 == 0:
+            if attempt_count % 100 == 0:
                 gc.collect()
                 
     return patches
