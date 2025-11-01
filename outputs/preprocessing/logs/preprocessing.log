@@ -6614,3 +6614,25 @@ Extracted 7766 patches from data/TCGA_BRCA_Filtered/SVS/TCGA-BH-A0E2-01Z-00-DX1.
 Processing slide: data/TCGA_BRCA_Filtered/SVS/TCGA-BH-A0EE-01Z-00-DX1.872EA586-25C8-4835-A138-152DFA1EBF30.svs with annotation: /media/thanakornbuath/Phone SSD/her2-attention-classifier/data/TCGA_BRCA_Filtered/Annotations/TCGA-BH-A0EE-01Z-00-DX1.xml
 Mask shape: (93788, 125444)
 Loaded WSI backend: cucim
+Processing slide: data/Yale_HER2_cohort/SVS/Her2Neg_Case_01.svs with annotation: /media/thanakornbuath/Phone SSD/her2-attention-classifier/data/Yale_HER2_cohort/Annotations/Her2Neg_Case_01.xml
+Mask shape: (45426, 41888)
+Loaded WSI backend: cucim
+Processing slide: data/Yale_HER2_cohort/SVS/Her2Neg_Case_01.svs with annotation: /media/thanakornbuath/Phone SSD/her2-attention-classifier/data/Yale_HER2_cohort/Annotations/Her2Neg_Case_01.xml
+Mask shape: (45426, 41888)
+Loaded WSI backend: cucim
+Processing slide: data/Yale_HER2_cohort/SVS/Her2Neg_Case_01.svs with annotation: /media/thanakornbuath/Phone SSD/her2-attention-classifier/data/Yale_HER2_cohort/Annotations/Her2Neg_Case_01.xml
+Processing slide: data/Yale_HER2_cohort/SVS/Her2Neg_Case_01.svs with annotation: /media/thanakornbuath/Phone SSD/her2-attention-classifier/data/Yale_HER2_cohort/Annotations/Her2Neg_Case_01.xml
+Mask shape: (45426, 41888)
+Loaded WSI backend: cucim
+Extracted 155 patches from data/Yale_HER2_cohort/SVS/Her2Neg_Case_01.svs; saved 155 to outputs/patches/Her2Neg_Case_01
+Processing slide: data/Yale_HER2_cohort/SVS/Her2Neg_Case_02.svs with annotation: /media/thanakornbuath/Phone SSD/her2-attention-classifier/data/Yale_HER2_cohort/Annotations/Her2Neg_Case_02.xml
+Mask shape: (28692, 31416)
+Loaded WSI backend: cucim
+Extracted 95 patches from data/Yale_HER2_cohort/SVS/Her2Neg_Case_02.svs; saved 95 to outputs/patches/Her2Neg_Case_02
+Processing slide: data/Yale_HER2_cohort/SVS/Her2Neg_Case_03.svs with annotation: /media/thanakornbuath/Phone SSD/her2-attention-classifier/data/Yale_HER2_cohort/Annotations/Her2Neg_Case_03.xml
+Mask shape: (23525, 29512)
+Loaded WSI backend: cucim
+Extracted 74 patches from data/Yale_HER2_cohort/SVS/Her2Neg_Case_03.svs; saved 74 to outputs/patches/Her2Neg_Case_03
+Processing slide: data/Yale_HER2_cohort/SVS/Her2Neg_Case_04.svs with annotation: /media/thanakornbuath/Phone SSD/her2-attention-classifier/data/Yale_HER2_cohort/Annotations/Her2Neg_Case_04.xml
+Mask shape: (34106, 40936)
+Loaded WSI backend: cucim
