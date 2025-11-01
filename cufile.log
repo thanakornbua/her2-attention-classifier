@@ -46,3 +46,5 @@
 
  28-10-2025 02:35:16:507 [pid=203703 tid=203703] WARN   0:184 failed to open /proc/driver/nvidia-fs/devcount  error: No such file or directory
  28-10-2025 02:35:16:507 [pid=203703 tid=203703] NOTICE  cufio-drv:851 running in compatible mode
+ 01-11-2025 12:50:04:25 [pid=6068 tid=6068] WARN   0:184 failed to open /proc/driver/nvidia-fs/devcount  error: No such file or directory
+ 01-11-2025 12:50:04:25 [pid=6068 tid=6068] NOTICE  cufio-drv:851 running in compatible mode
