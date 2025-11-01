@@ -120,20 +120,31 @@ class WSIReader:
         """Destructor - ensure resources are freed."""
         self.close()
 
-    def read_region(self, location: Tuple[int, int], level: int, size: Tuple[int, int]):
-        """Read a region and return a PIL.Image (like OpenSlide.read_region)."""
+    def read_region(self, location: Tuple[int, int], level: int, size: Tuple[int, int], device='cpu'):
+        """Read a region and return a PIL.Image (like OpenSlide.read_region).
+        
+        Args:
+            location: (x, y) tuple for top-left corner
+            level: pyramid level to read from
+            size: (width, height) tuple
+            device: 'cpu' or 'cuda' - where to store the image data (CuCIM only)
+        """
         if self._closed:
             raise RuntimeError("Cannot read from closed WSIReader")
         x, y = location
         w, h = size
         if self.backend == 'cucim':
             # CuImage.read_region may return different types depending on version/config.
-            # Request CPU output; then coerce to numpy and PIL.Image.
+            # Allow caller to specify device for GPU acceleration
             arr = None
             try:
-                arr = self._r.read_region(location=(x, y), size=(w, h), level=level)
-                if arr is None:
-                    arr = self._r.read_region(location=(x, y), size=(w, h), level=level, device='cpu')
+                arr = self._r.read_region(location=(x, y), size=(w, h), level=level, device=device)
+            except TypeError:
+                # Older CuCIM versions may not support device parameter
+                try:
+                    arr = self._r.read_region(location=(x, y), size=(w, h), level=level)
+                except Exception:
+                    arr = None
             except Exception:
                 try:
                     arr = self._r.read_region(location=(x, y), size=(w, h), level=level, device='cpu')
@@ -142,6 +153,17 @@ class WSIReader:
 
             def _to_numpy(a):
                 import numpy as _np
+                # If already numpy array, return it
+                if isinstance(a, _np.ndarray):
+                    return a
+                # Check if it's a CuPy array (GPU memory)
+                try:
+                    import cupy as cp
+                    if isinstance(a, cp.ndarray):
+                        # Transfer from GPU to CPU
+                        return cp.asnumpy(a)
+                except (ImportError, Exception):
+                    pass
                 # Try numpy.asarray first
                 try:
                     na = _np.asarray(a)
@@ -150,7 +172,7 @@ class WSIReader:
                 except Exception:
                     pass
                 # Try common CuCIM/array methods
-                for meth in ('copy_to_host', 'to_host', 'to_array', 'to_numpy', '__array__'):
+                for meth in ('copy_to_host', 'to_host', 'to_array', 'to_numpy', 'get', '__array__'):
                     try:
                         fn = getattr(a, meth, None)
                         if fn is None:
