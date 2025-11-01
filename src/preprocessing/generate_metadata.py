@@ -111,8 +111,24 @@ def discover_wsi(base_dir: Union[str, Path], sources: Union[str, List[str]],
         all_rows.extend(rows)
     
     # Use main.ipynb location as base for relative paths
-    main_ipynb_path = Path("/media/thanakornbuath/Phone SSD/her2-attention-classifier/main.ipynb")
-    relative_base = main_ipynb_path.parent if relative_paths else None
+    if relative_paths:
+        def _find_task_base(filename: str = "main.ipynb", starts: Optional[List[Path]] = None) -> Path:
+            starts = starts or []
+            try:
+                starts.append(Path(__file__).resolve().parent)
+            except Exception:
+                pass
+            starts.append(Path.cwd())
+            starts.append(base_dir)
+            for start in [s for s in starts if s]:
+                for ancestor in [start] + list(start.parents):
+                    if (ancestor / filename).exists():
+                        return ancestor
+            return base_dir
+
+        relative_base = _find_task_base("main.ipynb")
+    else:
+        relative_base = None
     
     output_path_obj = Path(output_path)
     write_csv(all_rows, output_path_obj, base_dir=relative_base)
