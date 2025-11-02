@@ -41,6 +41,8 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import Dataset, DataLoader
+from torch.utils.tensorboard import SummaryWriter
+from torch.cuda.amp import autocast, GradScaler
 import torchvision.transforms as T
 import torchvision.models as models
 import gc
@@ -49,6 +51,14 @@ from sklearn.metrics import roc_auc_score, accuracy_score, confusion_matrix, cla
 
 # Stain normalization (Macenko)
 from src.preprocessing.stain_normalization import macenko_normalization
+
+# Weights & Biases for experiment tracking
+try:
+    import wandb
+    WANDB_AVAILABLE = True
+except ImportError:
+    WANDB_AVAILABLE = False
+    print("Warning: wandb not installed. Install with: pip install wandb")
 
 
 def set_seed(seed: int = 42):
@@ -143,29 +153,74 @@ def build_optimizer(model, lr=1e-4, weight_decay=1e-4):
     return optim.AdamW(model.parameters(), lr=lr, weight_decay=weight_decay)
 
 
-def train_one_epoch(model, loader, criterion, optimizer, device):
+def train_one_epoch(model, loader, criterion, optimizer, device, accumulation_steps=1, use_amp=True):
     model.train()
     running_loss = 0.0
     all_targets, all_probs = [], []
+    optimizer.zero_grad(set_to_none=True)
+    
+    # Mixed precision scaler
+    scaler = GradScaler() if use_amp else None
+    
     for batch_idx, (imgs, labels, _) in enumerate(loader):
         imgs = imgs.to(device, non_blocking=True)
         labels = labels.to(device, non_blocking=True)
-        optimizer.zero_grad(set_to_none=True)  # More memory efficient than zero_grad()
-        logits = model(imgs)
-        loss = criterion(logits, labels)
-        loss.backward()
-        optimizer.step()
-        running_loss += loss.item() * imgs.size(0)
+        
+        # Mixed precision forward pass
+        if use_amp:
+            with autocast():
+                logits = model(imgs)
+                loss = criterion(logits, labels)
+        else:
+            logits = model(imgs)
+            loss = criterion(logits, labels)
+        
+        # Normalize loss for gradient accumulation
+        loss = loss / accumulation_steps
+        
+        # Backward pass with mixed precision
+        if use_amp:
+            scaler.scale(loss).backward()
+        else:
+            loss.backward()
+        
+        # Update weights every accumulation_steps batches
+        if (batch_idx + 1) % accumulation_steps == 0:
+            if use_amp:
+                scaler.step(optimizer)
+                scaler.update()
+            else:
+                optimizer.step()
+            optimizer.zero_grad(set_to_none=True)
+        
+        running_loss += loss.item() * imgs.size(0) * accumulation_steps
+        
         # Detach and move to CPU immediately to free GPU memory
         with torch.no_grad():
-            probs = torch.softmax(logits, dim=1)[:, 1].cpu().numpy()
+            if use_amp:
+                # Compute probs in float32 for numerical stability
+                probs = torch.softmax(logits.float(), dim=1)[:, 1].cpu().numpy()
+            else:
+                probs = torch.softmax(logits, dim=1)[:, 1].cpu().numpy()
         all_probs.extend(probs.tolist())
         all_targets.extend(labels.cpu().numpy().tolist())
+        
         # Free GPU memory explicitly
         del imgs, labels, logits, loss, probs
-        # Periodic garbage collection to prevent memory fragmentation
-        if batch_idx % 50 == 0:
+        
+        # More aggressive memory cleanup for small GPUs
+        if batch_idx % 10 == 0:
             torch.cuda.empty_cache()
+    
+    # Handle remaining gradients if batches don't divide evenly
+    if len(loader) % accumulation_steps != 0:
+        if use_amp:
+            scaler.step(optimizer)
+            scaler.update()
+        else:
+            optimizer.step()
+        optimizer.zero_grad(set_to_none=True)
+    
     epoch_loss = running_loss / len(loader.dataset)
     try:
         epoch_auc = roc_auc_score(all_targets, all_probs)
@@ -176,7 +231,7 @@ def train_one_epoch(model, loader, criterion, optimizer, device):
     return {'loss': epoch_loss, 'auc': epoch_auc, 'acc': epoch_acc}
 
 
-def evaluate(model, loader, criterion, device):
+def evaluate(model, loader, criterion, device, use_amp=True):
     model.eval()
     running_loss = 0.0
     all_targets, all_probs = [], []
@@ -184,16 +239,29 @@ def evaluate(model, loader, criterion, device):
         for batch_idx, (imgs, labels, _) in enumerate(loader):
             imgs = imgs.to(device, non_blocking=True)
             labels = labels.to(device, non_blocking=True)
-            logits = model(imgs)
-            loss = criterion(logits, labels)
+            
+            # Mixed precision forward pass
+            if use_amp:
+                with autocast():
+                    logits = model(imgs)
+                    loss = criterion(logits, labels)
+            else:
+                logits = model(imgs)
+                loss = criterion(logits, labels)
+            
             running_loss += loss.item() * imgs.size(0)
-            probs = torch.softmax(logits, dim=1)[:, 1].cpu().numpy()
+            
+            if use_amp:
+                probs = torch.softmax(logits.float(), dim=1)[:, 1].cpu().numpy()
+            else:
+                probs = torch.softmax(logits, dim=1)[:, 1].cpu().numpy()
+            
             all_probs.extend(probs.tolist())
             all_targets.extend(labels.cpu().numpy().tolist())
             # Free GPU memory explicitly
             del imgs, labels, logits, loss, probs
-            # Periodic memory cleanup
-            if batch_idx % 50 == 0:
+            # More aggressive memory cleanup for small GPUs
+            if batch_idx % 10 == 0:
                 torch.cuda.empty_cache()
     epoch_loss = running_loss / len(loader.dataset)
     try:
@@ -267,8 +335,32 @@ def train_phase1(config: Dict[str, Any]):
     models_dir = out_dir / 'models'
     logs_dir = out_dir / 'logs'
     vis_dir = out_dir / 'gradcam'
-    for d in [out_dir, models_dir, logs_dir, vis_dir]:
+    tb_dir = out_dir / 'tensorboard'
+    for d in [out_dir, models_dir, logs_dir, vis_dir, tb_dir]:
         d.mkdir(parents=True, exist_ok=True)
+    
+    # Initialize TensorBoard writer
+    writer = SummaryWriter(log_dir=str(tb_dir))
+    
+    # Initialize Weights & Biases
+    use_wandb = cfg.get('use_wandb', True) and WANDB_AVAILABLE
+    if use_wandb:
+        wandb_project = cfg.get('wandb_project', 'her2-classification')
+        wandb_name = cfg.get('wandb_name', f"phase1_bs{cfg['batch_size']}_size{cfg['input_size']}")
+        wandb.init(
+            project=wandb_project,
+            name=wandb_name,
+            config=cfg,
+            dir=str(out_dir),
+            tags=['phase1', 'resnet50', 'her2-classifier']
+        )
+        # Log model architecture
+        print(f"Weights & Biases initialized: {wandb_project}/{wandb_name}")
+    else:
+        if not WANDB_AVAILABLE:
+            print("Weights & Biases not available - install with: pip install wandb")
+        else:
+            print("Weights & Biases logging disabled")
 
     # Datasets and loaders
     train_tfms = build_transforms(int(cfg['input_size']), train=True)
@@ -305,14 +397,51 @@ def train_phase1(config: Dict[str, Any]):
     best_score = -np.inf
     best_metrics = {}
     history = []
+    
+    # Get gradient accumulation steps
+    accumulation_steps = int(cfg.get('accumulation_steps', 1))
+    use_amp = cfg.get('use_amp', True) and torch.cuda.is_available()
+    
+    if accumulation_steps > 1:
+        print(f"Using gradient accumulation with {accumulation_steps} steps (effective batch size: {int(cfg['batch_size']) * accumulation_steps})")
+    if use_amp:
+        print("Using mixed precision training (FP16) for memory efficiency")
 
     start_time = time.time()
     epochs = int(cfg['epochs'])
     for epoch in range(epochs):
         t0 = time.time()
-        train_log = train_one_epoch(model, train_loader, criterion, optimizer, device)
-        val_log = evaluate(model, val_loader, criterion, device)
+        train_log = train_one_epoch(model, train_loader, criterion, optimizer, device, accumulation_steps, use_amp)
+        val_log = evaluate(model, val_loader, criterion, device, use_amp)
         history.append({'train': train_log, 'val': {k: val_log[k] for k in ['loss', 'auc', 'acc']}})
+
+        # Log to TensorBoard
+        writer.add_scalar('Loss/train', train_log['loss'], epoch)
+        writer.add_scalar('Loss/val', val_log['loss'], epoch)
+        writer.add_scalar('AUC/train', train_log['auc'], epoch)
+        writer.add_scalar('AUC/val', val_log['auc'], epoch)
+        writer.add_scalar('Accuracy/train', train_log['acc'], epoch)
+        writer.add_scalar('Accuracy/val', val_log['acc'], epoch)
+        writer.add_scalar('Learning_Rate', optimizer.param_groups[0]['lr'], epoch)
+        
+        # Log to Weights & Biases
+        if use_wandb:
+            wandb_log = {
+                'epoch': epoch,
+                'train/loss': train_log['loss'],
+                'train/auc': train_log['auc'],
+                'train/acc': train_log['acc'],
+                'val/loss': val_log['loss'],
+                'val/auc': val_log['auc'],
+                'val/acc': val_log['acc'],
+                'learning_rate': optimizer.param_groups[0]['lr'],
+            }
+            # Add GPU memory usage if available
+            if torch.cuda.is_available():
+                wandb_log['gpu/memory_allocated_gb'] = torch.cuda.memory_allocated() / 1024**3
+                wandb_log['gpu/memory_reserved_gb'] = torch.cuda.memory_reserved() / 1024**3
+                wandb_log['gpu/max_memory_allocated_gb'] = torch.cuda.max_memory_allocated() / 1024**3
+            wandb.log(wandb_log, step=epoch)
 
         cur_score = val_log.get(best_key, float('-inf'))
         improved = np.isfinite(cur_score) and cur_score > best_score
@@ -325,6 +454,14 @@ def train_phase1(config: Dict[str, Any]):
                 'val': {k: float(val_log[k]) if isinstance(val_log[k], (int, float, np.floating)) else None for k in ['loss', 'auc', 'acc']}
             }
             torch.save(model.state_dict(), models_dir / 'model_phase1.pth')
+            
+            # Log best metrics to wandb
+            if use_wandb:
+                wandb.run.summary['best_epoch'] = epoch
+                wandb.run.summary['best_val_auc'] = float(val_log['auc'])
+                wandb.run.summary['best_val_acc'] = float(val_log['acc'])
+                wandb.run.summary['best_val_loss'] = float(val_log['loss'])
+        
         dur = time.time() - t0
         print(
             f"Epoch {epoch+1}/{epochs} | "
@@ -335,6 +472,9 @@ def train_phase1(config: Dict[str, Any]):
         # Clean up after each epoch to prevent memory accumulation
         gc.collect()
         torch.cuda.empty_cache()
+    
+    # Close TensorBoard writer
+    writer.close()
 
     # Save logs, confusion matrix, and report for final val run
     save_metrics_csv_json(history, best_metrics, logs_dir)
@@ -344,16 +484,42 @@ def train_phase1(config: Dict[str, Any]):
         rep = val_log['report']
         pd.DataFrame(cm, index=['HER2-', 'HER2+'], columns=['Pred -', 'Pred +']).to_csv(logs_dir / 'confusion_matrix.csv')
         pd.DataFrame(rep).to_csv(logs_dir / 'classification_report.csv')
-    except Exception:
-        pass
+        
+        # Log confusion matrix to wandb
+        if use_wandb:
+            # Create wandb confusion matrix
+            wandb.log({
+                "conf_mat": wandb.plot.confusion_matrix(
+                    probs=None,
+                    y_true=val_log['targets'],
+                    preds=(np.array(val_log['probs']) >= 0.5).astype(int),
+                    class_names=['HER2-', 'HER2+']
+                )
+            })
+            # Log classification report as table
+            report_df = pd.DataFrame(rep).transpose()
+            wandb.log({"classification_report": wandb.Table(dataframe=report_df)})
+    except Exception as e:
+        print(f"Warning: Failed to log final metrics: {e}")
+    
+    # Close wandb
+    if use_wandb:
+        wandb.finish()
+        print("Weights & Biases run finished")
 
     best_model_path = models_dir / 'model_phase1.pth'
     print('Best model saved at:', best_model_path)
     print('Training finished in', f"{(time.time()-start_time)/60:.1f} min")
+    print(f'TensorBoard logs saved to: {tb_dir}')
+    print(f'To view: tensorboard --logdir={tb_dir}')
+    if use_wandb:
+        print(f'Weights & Biases dashboard: {wandb.run.url}')
 
     return {
         'best_model_path': str(best_model_path),
         'best_metrics': best_metrics,
         'logs_dir': str(logs_dir),
         'models_dir': str(models_dir),
+        'tb_dir': str(tb_dir),
+        'wandb_url': wandb.run.url if use_wandb else None,
     }
