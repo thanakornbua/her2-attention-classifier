@@ -21,3 +21,5 @@ __pycache__/
 
 *.log
 outputs/preprocessing/logs/preprocessing.log
+outputs/phase1/models/model_phase1.pth
+*.tfevents.*

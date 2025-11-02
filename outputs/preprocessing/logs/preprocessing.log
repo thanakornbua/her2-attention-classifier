@@ -1,123 +1,3 @@
-Processing slide: data/Yale_HER2_cohort/SVS/Her2Neg_Case_01.svs with annotation: /media/thanakornbuath/Phone SSD/her2-attention-classifier/data/Yale_HER2_cohort/Annotations/Her2Neg_Case_01.xml
-Mask shape: (45426, 41888)
-Loaded WSI backend: cucim
-Skipping data/Yale_HER2_cohort/SVS/Her2Neg_Case_01.svs; found 155 existing patches in outputs/patches/Her2Neg_Case_01
-Processing slide: data/Yale_HER2_cohort/SVS/Her2Neg_Case_02.svs with annotation: /media/thanakornbuath/Phone SSD/her2-attention-classifier/data/Yale_HER2_cohort/Annotations/Her2Neg_Case_02.xml
-Mask shape: (28692, 31416)
-Loaded WSI backend: cucim
-Skipping data/Yale_HER2_cohort/SVS/Her2Neg_Case_02.svs; found 95 existing patches in outputs/patches/Her2Neg_Case_02
-Processing slide: data/Yale_HER2_cohort/SVS/Her2Neg_Case_03.svs with annotation: /media/thanakornbuath/Phone SSD/her2-attention-classifier/data/Yale_HER2_cohort/Annotations/Her2Neg_Case_03.xml
-Mask shape: (23525, 29512)
-Loaded WSI backend: cucim
-Skipping data/Yale_HER2_cohort/SVS/Her2Neg_Case_03.svs; found 74 existing patches in outputs/patches/Her2Neg_Case_03
-Processing slide: data/Yale_HER2_cohort/SVS/Her2Neg_Case_04.svs with annotation: /media/thanakornbuath/Phone SSD/her2-attention-classifier/data/Yale_HER2_cohort/Annotations/Her2Neg_Case_04.xml
-Mask shape: (34106, 40936)
-Loaded WSI backend: cucim
-Skipping data/Yale_HER2_cohort/SVS/Her2Neg_Case_04.svs; found 86 existing patches in outputs/patches/Her2Neg_Case_04
-Processing slide: data/Yale_HER2_cohort/SVS/Her2Neg_Case_05.svs with annotation: /media/thanakornbuath/Phone SSD/her2-attention-classifier/data/Yale_HER2_cohort/Annotations/Her2Neg_Case_05.xml
-Mask shape: (17618, 19992)
-Loaded WSI backend: cucim
-Skipping data/Yale_HER2_cohort/SVS/Her2Neg_Case_05.svs; found 16 existing patches in outputs/patches/Her2Neg_Case_05
-Processing slide: data/Yale_HER2_cohort/SVS/Her2Neg_Case_06.svs with annotation: /media/thanakornbuath/Phone SSD/her2-attention-classifier/data/Yale_HER2_cohort/Annotations/Her2Neg_Case_06.xml
-Mask shape: (22704, 22848)
-Loaded WSI backend: cucim
-Skipping data/Yale_HER2_cohort/SVS/Her2Neg_Case_06.svs; found 108 existing patches in outputs/patches/Her2Neg_Case_06
-Processing slide: data/Yale_HER2_cohort/SVS/Her2Neg_Case_07.svs with annotation: /media/thanakornbuath/Phone SSD/her2-attention-classifier/data/Yale_HER2_cohort/Annotations/Her2Neg_Case_07.xml
-Mask shape: (32383, 25704)
-Loaded WSI backend: cucim
-Skipping data/Yale_HER2_cohort/SVS/Her2Neg_Case_07.svs; found 46 existing patches in outputs/patches/Her2Neg_Case_07
-Processing slide: data/Yale_HER2_cohort/SVS/Her2Neg_Case_08.svs with annotation: /media/thanakornbuath/Phone SSD/her2-attention-classifier/data/Yale_HER2_cohort/Annotations/Her2Neg_Case_08.xml
-Mask shape: (20244, 32368)
-Loaded WSI backend: cucim
-Skipping data/Yale_HER2_cohort/SVS/Her2Neg_Case_08.svs; found 44 existing patches in outputs/patches/Her2Neg_Case_08
-Processing slide: data/Yale_HER2_cohort/SVS/Her2Neg_Case_09.svs with annotation: /media/thanakornbuath/Phone SSD/her2-attention-classifier/data/Yale_HER2_cohort/Annotations/Her2Neg_Case_09.xml
-Mask shape: (36075, 46648)
-Loaded WSI backend: cucim
-Skipping data/Yale_HER2_cohort/SVS/Her2Neg_Case_09.svs; found 87 existing patches in outputs/patches/Her2Neg_Case_09
-Processing slide: data/Yale_HER2_cohort/SVS/Her2Neg_Case_10.svs with annotation: /media/thanakornbuath/Phone SSD/her2-attention-classifier/data/Yale_HER2_cohort/Annotations/Her2Neg_Case_10.xml
-Mask shape: (24182, 50456)
-Loaded WSI backend: cucim
-Skipping data/Yale_HER2_cohort/SVS/Her2Neg_Case_10.svs; found 18 existing patches in outputs/patches/Her2Neg_Case_10
-Processing slide: data/Yale_HER2_cohort/SVS/Her2Neg_Case_11.svs with annotation: /media/thanakornbuath/Phone SSD/her2-attention-classifier/data/Yale_HER2_cohort/Annotations/Her2Neg_Case_11.xml
-Mask shape: (28939, 36176)
-Loaded WSI backend: cucim
-Skipping data/Yale_HER2_cohort/SVS/Her2Neg_Case_11.svs; found 182 existing patches in outputs/patches/Her2Neg_Case_11
-Processing slide: data/Yale_HER2_cohort/SVS/Her2Neg_Case_12.svs with annotation: /media/thanakornbuath/Phone SSD/her2-attention-classifier/data/Yale_HER2_cohort/Annotations/Her2Neg_Case_12.xml
-Mask shape: (21227, 22848)
-Loaded WSI backend: cucim
-Skipping data/Yale_HER2_cohort/SVS/Her2Neg_Case_12.svs; found 190 existing patches in outputs/patches/Her2Neg_Case_12
-Processing slide: data/Yale_HER2_cohort/SVS/Her2Neg_Case_13.svs with annotation: /media/thanakornbuath/Phone SSD/her2-attention-classifier/data/Yale_HER2_cohort/Annotations/Her2Neg_Case_13.xml
-Mask shape: (25985, 27608)
-Loaded WSI backend: cucim
-Skipping data/Yale_HER2_cohort/SVS/Her2Neg_Case_13.svs; found 362 existing patches in outputs/patches/Her2Neg_Case_13
-Processing slide: data/Yale_HER2_cohort/SVS/Her2Neg_Case_14.svs with annotation: /media/thanakornbuath/Phone SSD/her2-attention-classifier/data/Yale_HER2_cohort/Annotations/Her2Neg_Case_14.xml
-Mask shape: (18685, 29512)
-Loaded WSI backend: cucim
-Skipping data/Yale_HER2_cohort/SVS/Her2Neg_Case_14.svs; found 192 existing patches in outputs/patches/Her2Neg_Case_14
-Processing slide: data/Yale_HER2_cohort/SVS/Her2Neg_Case_15.svs with annotation: /media/thanakornbuath/Phone SSD/her2-attention-classifier/data/Yale_HER2_cohort/Annotations/Her2Neg_Case_15.xml
-Mask shape: (32301, 25704)
-Loaded WSI backend: cucim
-Skipping data/Yale_HER2_cohort/SVS/Her2Neg_Case_15.svs; found 271 existing patches in outputs/patches/Her2Neg_Case_15
-Processing slide: data/Yale_HER2_cohort/SVS/Her2Neg_Case_16.svs with annotation: /media/thanakornbuath/Phone SSD/her2-attention-classifier/data/Yale_HER2_cohort/Annotations/Her2Neg_Case_16.xml
-Mask shape: (19751, 27608)
-Loaded WSI backend: cucim
-Skipping data/Yale_HER2_cohort/SVS/Her2Neg_Case_16.svs; found 258 existing patches in outputs/patches/Her2Neg_Case_16
-Processing slide: data/Yale_HER2_cohort/SVS/Her2Neg_Case_17.svs with annotation: /media/thanakornbuath/Phone SSD/her2-attention-classifier/data/Yale_HER2_cohort/Annotations/Her2Neg_Case_17.xml
-Mask shape: (16635, 37128)
-Loaded WSI backend: cucim
-Skipping data/Yale_HER2_cohort/SVS/Her2Neg_Case_17.svs; found 61 existing patches in outputs/patches/Her2Neg_Case_17
-Processing slide: data/Yale_HER2_cohort/SVS/Her2Neg_Case_18.svs with annotation: /media/thanakornbuath/Phone SSD/her2-attention-classifier/data/Yale_HER2_cohort/Annotations/Her2Neg_Case_18.xml
-Mask shape: (40669, 54264)
-Loaded WSI backend: cucim
-Skipping data/Yale_HER2_cohort/SVS/Her2Neg_Case_18.svs; found 161 existing patches in outputs/patches/Her2Neg_Case_18
-Processing slide: data/Yale_HER2_cohort/SVS/Her2Neg_Case_19.svs with annotation: /media/thanakornbuath/Phone SSD/her2-attention-classifier/data/Yale_HER2_cohort/Annotations/Her2Neg_Case_19.xml
-Mask shape: (19587, 25704)
-Loaded WSI backend: cucim
-Skipping data/Yale_HER2_cohort/SVS/Her2Neg_Case_19.svs; found 132 existing patches in outputs/patches/Her2Neg_Case_19
-Processing slide: data/Yale_HER2_cohort/SVS/Her2Neg_Case_20.svs with annotation: /media/thanakornbuath/Phone SSD/her2-attention-classifier/data/Yale_HER2_cohort/Annotations/Her2Neg_Case_20.xml
-Mask shape: (24590, 23800)
-Loaded WSI backend: cucim
-Skipping data/Yale_HER2_cohort/SVS/Her2Neg_Case_20.svs; found 102 existing patches in outputs/patches/Her2Neg_Case_20
-Processing slide: data/Yale_HER2_cohort/SVS/Her2Neg_Case_21.svs with annotation: /media/thanakornbuath/Phone SSD/her2-attention-classifier/data/Yale_HER2_cohort/Annotations/Her2Neg_Case_21.xml
-Mask shape: (21556, 26656)
-Loaded WSI backend: cucim
-Skipping data/Yale_HER2_cohort/SVS/Her2Neg_Case_21.svs; found 187 existing patches in outputs/patches/Her2Neg_Case_21
-Processing slide: data/Yale_HER2_cohort/SVS/Her2Neg_Case_22.svs with annotation: /media/thanakornbuath/Phone SSD/her2-attention-classifier/data/Yale_HER2_cohort/Annotations/Her2Neg_Case_22.xml
-Mask shape: (40916, 57120)
-Loaded WSI backend: cucim
-Skipping data/Yale_HER2_cohort/SVS/Her2Neg_Case_22.svs; found 1043 existing patches in outputs/patches/Her2Neg_Case_22
-Processing slide: data/Yale_HER2_cohort/SVS/Her2Neg_Case_23.svs with annotation: /media/thanakornbuath/Phone SSD/her2-attention-classifier/data/Yale_HER2_cohort/Annotations/Her2Neg_Case_23.xml
-Mask shape: (34352, 39032)
-Loaded WSI backend: cucim
-Skipping data/Yale_HER2_cohort/SVS/Her2Neg_Case_23.svs; found 102 existing patches in outputs/patches/Her2Neg_Case_23
-Processing slide: data/Yale_HER2_cohort/SVS/Her2Neg_Case_24.svs with annotation: /media/thanakornbuath/Phone SSD/her2-attention-classifier/data/Yale_HER2_cohort/Annotations/Her2Neg_Case_24.xml
-Mask shape: (23525, 30464)
-Loaded WSI backend: cucim
-Skipping data/Yale_HER2_cohort/SVS/Her2Neg_Case_24.svs; found 206 existing patches in outputs/patches/Her2Neg_Case_24
-Processing slide: data/Yale_HER2_cohort/SVS/Her2Neg_Case_25.svs with annotation: /media/thanakornbuath/Phone SSD/her2-attention-classifier/data/Yale_HER2_cohort/Annotations/Her2Neg_Case_25.xml
-Mask shape: (26723, 19040)
-Loaded WSI backend: cucim
-Skipping data/Yale_HER2_cohort/SVS/Her2Neg_Case_25.svs; found 294 existing patches in outputs/patches/Her2Neg_Case_25
-Processing slide: data/Yale_HER2_cohort/SVS/Her2Neg_Case_26.svs with annotation: /media/thanakornbuath/Phone SSD/her2-attention-classifier/data/Yale_HER2_cohort/Annotations/Her2Neg_Case_26.xml
-Mask shape: (27052, 30464)
-Loaded WSI backend: cucim
-Skipping data/Yale_HER2_cohort/SVS/Her2Neg_Case_26.svs; found 181 existing patches in outputs/patches/Her2Neg_Case_26
-Processing slide: data/Yale_HER2_cohort/SVS/Her2Neg_Case_27.svs with annotation: /media/thanakornbuath/Phone SSD/her2-attention-classifier/data/Yale_HER2_cohort/Annotations/Her2Neg_Case_27.xml
-Mask shape: (16306, 20944)
-Loaded WSI backend: cucim
-Skipping data/Yale_HER2_cohort/SVS/Her2Neg_Case_27.svs; found 183 existing patches in outputs/patches/Her2Neg_Case_27
-Processing slide: data/Yale_HER2_cohort/SVS/Her2Neg_Case_28.svs with annotation: /media/thanakornbuath/Phone SSD/her2-attention-classifier/data/Yale_HER2_cohort/Annotations/Her2Neg_Case_28.xml
-Mask shape: (13271, 19992)
-Loaded WSI backend: cucim
-Skipping data/Yale_HER2_cohort/SVS/Her2Neg_Case_28.svs; found 58 existing patches in outputs/patches/Her2Neg_Case_28
-Processing slide: data/Yale_HER2_cohort/SVS/Her2Neg_Case_29.svs with annotation: /media/thanakornbuath/Phone SSD/her2-attention-classifier/data/Yale_HER2_cohort/Annotations/Her2Neg_Case_29.xml
-Mask shape: (22622, 32368)
-Loaded WSI backend: cucim
-Skipping data/Yale_HER2_cohort/SVS/Her2Neg_Case_29.svs; found 177 existing patches in outputs/patches/Her2Neg_Case_29
-Processing slide: data/Yale_HER2_cohort/SVS/Her2Neg_Case_30.svs with annotation: /media/thanakornbuath/Phone SSD/her2-attention-classifier/data/Yale_HER2_cohort/Annotations/Her2Neg_Case_30.xml
-Mask shape: (30088, 53312)
-Loaded WSI backend: cucim
-Skipping data/Yale_HER2_cohort/SVS/Her2Neg_Case_30.svs; found 266 existing patches in outputs/patches/Her2Neg_Case_30
 2025-11-02 02:19:04,517 - INFO - Processing slide: data/Yale_HER2_cohort/SVS/Her2Neg_Case_01.svs with annotation: /media/thanakornbuath/Phone SSD/her2-attention-classifier/data/Yale_HER2_cohort/Annotations/Her2Neg_Case_01.xml
 2025-11-02 02:19:04,517 - INFO - Processing slide: data/Yale_HER2_cohort/SVS/Her2Neg_Case_01.svs with annotation: /media/thanakornbuath/Phone SSD/her2-attention-classifier/data/Yale_HER2_cohort/Annotations/Her2Neg_Case_01.xml
 2025-11-02 02:19:04,762 - INFO - Mask shape: (45426, 41888)
@@ -3956,3 +3836,834 @@ Skipping data/Yale_HER2_cohort/SVS/Her2Neg_Case_30.svs; found 266 existing patch
 2025-11-02 03:55:05,269 - INFO - Processing slide: data/TCGA_BRCA_Filtered/SVS/TCGA-BH-A18J-01Z-00-DX1.AE20ADB6-050C-405D-BF17-1EE4A1A4979A.svs
 2025-11-02 03:55:05,310 - INFO - Mask shape: (9599, 13645)
 2025-11-02 03:55:05,311 - INFO - Loaded WSI backend: cucim
+2025-11-02 04:43:32,771 - INFO - ================================================================================
+2025-11-02 04:43:32,772 - INFO - Starting train/val CSV generation
+2025-11-02 04:43:32,772 - INFO - ================================================================================
+2025-11-02 04:43:32,790 - INFO - Loaded TCGA labels from: data/TCGA_BRCA_Filtered/case&annotation_counts_clean.xlsx
+2025-11-02 04:43:32,790 - INFO - TCGA cases in Excel: 182
+2025-11-02 04:43:32,796 - INFO - TCGA positive cases: 92
+2025-11-02 04:43:32,796 - INFO - TCGA negative cases: 90
+2025-11-02 04:43:32,796 - INFO - Collecting patches from all cases...
+2025-11-02 04:43:32,939 - INFO - Found 375 case directories
+2025-11-02 04:46:04,526 - INFO - Total patches collected: 629567
+2025-11-02 04:46:04,734 - INFO - Label distribution - Negative: 342205, Positive: 287362
+2025-11-02 04:46:04,779 - INFO - Number of cases - Negative: 154, Positive: 221
+2025-11-02 04:46:04,779 - INFO - Performing train/val split by case...
+2025-11-02 04:46:12,380 - INFO - Train patches: 470418, Val patches: 159149
+2025-11-02 04:46:12,380 - INFO - Train cases: 300, Val cases: 75
+2025-11-02 04:46:12,392 - INFO - Train split - Negative: 241301, Positive: 229117
+2025-11-02 04:46:12,392 - INFO - Val split - Negative: 100904, Positive: 58245
+2025-11-02 04:47:12,487 - INFO - Saved train CSV to: outputs/patches_index_train.csv
+2025-11-02 04:47:12,487 - INFO - Saved val CSV to: outputs/patches_index_val.csv
+2025-11-02 04:47:12,487 - INFO - Train/val CSV generation completed successfully
+2025-11-02 04:47:12,487 - INFO - ================================================================================
+2025-11-02 04:54:40,919 - INFO - Processing slide: data/Yale_HER2_cohort/SVS/Her2Neg_Case_01.svs
+2025-11-02 04:54:40,958 - INFO - Mask shape: (5678, 5236)
+2025-11-02 04:54:40,958 - INFO - Loaded WSI backend: cucim
+2025-11-02 04:54:41,010 - INFO - Skipping data/Yale_HER2_cohort/SVS/Her2Neg_Case_01.svs; found 155 existing patches in outputs/patches/Her2Neg_Case_01
+2025-11-02 04:54:41,101 - INFO - Processing slide: data/Yale_HER2_cohort/SVS/Her2Neg_Case_02.svs
+2025-11-02 04:54:41,148 - INFO - Mask shape: (3586, 3927)
+2025-11-02 04:54:41,149 - INFO - Loaded WSI backend: cucim
+2025-11-02 04:54:41,189 - INFO - Skipping data/Yale_HER2_cohort/SVS/Her2Neg_Case_02.svs; found 95 existing patches in outputs/patches/Her2Neg_Case_02
+2025-11-02 04:54:41,277 - INFO - Processing slide: data/Yale_HER2_cohort/SVS/Her2Neg_Case_03.svs
+2025-11-02 04:54:41,313 - INFO - Mask shape: (2940, 3689)
+2025-11-02 04:54:41,313 - INFO - Loaded WSI backend: cucim
+2025-11-02 04:54:41,353 - INFO - Skipping data/Yale_HER2_cohort/SVS/Her2Neg_Case_03.svs; found 74 existing patches in outputs/patches/Her2Neg_Case_03
+2025-11-02 04:54:41,440 - INFO - Processing slide: data/Yale_HER2_cohort/SVS/Her2Neg_Case_04.svs
+2025-11-02 04:54:41,470 - INFO - Mask shape: (4263, 5117)
+2025-11-02 04:54:41,471 - INFO - Loaded WSI backend: cucim
+2025-11-02 04:54:41,517 - INFO - Skipping data/Yale_HER2_cohort/SVS/Her2Neg_Case_04.svs; found 86 existing patches in outputs/patches/Her2Neg_Case_04
+2025-11-02 04:54:41,613 - INFO - Processing slide: data/Yale_HER2_cohort/SVS/Her2Neg_Case_05.svs
+2025-11-02 04:54:41,626 - INFO - Mask shape: (2202, 2499)
+2025-11-02 04:54:41,626 - INFO - Loaded WSI backend: cucim
+2025-11-02 04:54:41,633 - INFO - Skipping data/Yale_HER2_cohort/SVS/Her2Neg_Case_05.svs; found 16 existing patches in outputs/patches/Her2Neg_Case_05
+2025-11-02 04:54:41,731 - INFO - Processing slide: data/Yale_HER2_cohort/SVS/Her2Neg_Case_06.svs
+2025-11-02 04:54:41,748 - INFO - Mask shape: (2838, 2856)
+2025-11-02 04:54:41,748 - INFO - Loaded WSI backend: cucim
+2025-11-02 04:54:41,785 - INFO - Skipping data/Yale_HER2_cohort/SVS/Her2Neg_Case_06.svs; found 108 existing patches in outputs/patches/Her2Neg_Case_06
+2025-11-02 04:54:41,877 - INFO - Processing slide: data/Yale_HER2_cohort/SVS/Her2Neg_Case_07.svs
+2025-11-02 04:54:41,892 - INFO - Mask shape: (4047, 3213)
+2025-11-02 04:54:41,892 - INFO - Loaded WSI backend: cucim
+2025-11-02 04:54:41,907 - INFO - Skipping data/Yale_HER2_cohort/SVS/Her2Neg_Case_07.svs; found 46 existing patches in outputs/patches/Her2Neg_Case_07
+2025-11-02 04:54:41,999 - INFO - Processing slide: data/Yale_HER2_cohort/SVS/Her2Neg_Case_08.svs
+2025-11-02 04:54:42,019 - INFO - Mask shape: (2530, 4046)
+2025-11-02 04:54:42,019 - INFO - Loaded WSI backend: cucim
+2025-11-02 04:54:42,034 - INFO - Skipping data/Yale_HER2_cohort/SVS/Her2Neg_Case_08.svs; found 44 existing patches in outputs/patches/Her2Neg_Case_08
+2025-11-02 04:54:42,125 - INFO - Processing slide: data/Yale_HER2_cohort/SVS/Her2Neg_Case_09.svs
+2025-11-02 04:54:42,154 - INFO - Mask shape: (4509, 5831)
+2025-11-02 04:54:42,154 - INFO - Loaded WSI backend: cucim
+2025-11-02 04:54:42,185 - INFO - Skipping data/Yale_HER2_cohort/SVS/Her2Neg_Case_09.svs; found 87 existing patches in outputs/patches/Her2Neg_Case_09
+2025-11-02 04:54:42,276 - INFO - Processing slide: data/Yale_HER2_cohort/SVS/Her2Neg_Case_10.svs
+2025-11-02 04:54:42,296 - INFO - Mask shape: (3022, 6307)
+2025-11-02 04:54:42,297 - INFO - Loaded WSI backend: cucim
+2025-11-02 04:54:42,302 - INFO - Skipping data/Yale_HER2_cohort/SVS/Her2Neg_Case_10.svs; found 18 existing patches in outputs/patches/Her2Neg_Case_10
+2025-11-02 04:54:42,394 - INFO - Processing slide: data/Yale_HER2_cohort/SVS/Her2Neg_Case_11.svs
+2025-11-02 04:54:42,411 - INFO - Mask shape: (3617, 4522)
+2025-11-02 04:54:42,412 - INFO - Loaded WSI backend: cucim
+2025-11-02 04:54:42,476 - INFO - Skipping data/Yale_HER2_cohort/SVS/Her2Neg_Case_11.svs; found 182 existing patches in outputs/patches/Her2Neg_Case_11
+2025-11-02 04:54:42,570 - INFO - Processing slide: data/Yale_HER2_cohort/SVS/Her2Neg_Case_12.svs
+2025-11-02 04:54:42,587 - INFO - Mask shape: (2653, 2856)
+2025-11-02 04:54:42,587 - INFO - Loaded WSI backend: cucim
+2025-11-02 04:54:42,647 - INFO - Skipping data/Yale_HER2_cohort/SVS/Her2Neg_Case_12.svs; found 190 existing patches in outputs/patches/Her2Neg_Case_12
+2025-11-02 04:54:42,743 - INFO - Processing slide: data/Yale_HER2_cohort/SVS/Her2Neg_Case_13.svs
+2025-11-02 04:54:42,760 - INFO - Mask shape: (3248, 3451)
+2025-11-02 04:54:42,760 - INFO - Loaded WSI backend: cucim
+2025-11-02 04:54:42,899 - INFO - Skipping data/Yale_HER2_cohort/SVS/Her2Neg_Case_13.svs; found 362 existing patches in outputs/patches/Her2Neg_Case_13
+2025-11-02 04:54:42,998 - INFO - Processing slide: data/Yale_HER2_cohort/SVS/Her2Neg_Case_14.svs
+2025-11-02 04:54:43,030 - INFO - Mask shape: (2335, 3689)
+2025-11-02 04:54:43,031 - INFO - Loaded WSI backend: cucim
+2025-11-02 04:54:43,104 - INFO - Skipping data/Yale_HER2_cohort/SVS/Her2Neg_Case_14.svs; found 192 existing patches in outputs/patches/Her2Neg_Case_14
+2025-11-02 04:54:43,198 - INFO - Processing slide: data/Yale_HER2_cohort/SVS/Her2Neg_Case_15.svs
+2025-11-02 04:54:43,227 - INFO - Mask shape: (4037, 3213)
+2025-11-02 04:54:43,229 - INFO - Loaded WSI backend: cucim
+2025-11-02 04:54:43,312 - INFO - Skipping data/Yale_HER2_cohort/SVS/Her2Neg_Case_15.svs; found 271 existing patches in outputs/patches/Her2Neg_Case_15
+2025-11-02 04:54:43,405 - INFO - Processing slide: data/Yale_HER2_cohort/SVS/Her2Neg_Case_16.svs
+2025-11-02 04:54:43,436 - INFO - Mask shape: (2468, 3451)
+2025-11-02 04:54:43,436 - INFO - Loaded WSI backend: cucim
+2025-11-02 04:54:43,515 - INFO - Skipping data/Yale_HER2_cohort/SVS/Her2Neg_Case_16.svs; found 258 existing patches in outputs/patches/Her2Neg_Case_16
+2025-11-02 04:54:43,609 - INFO - Processing slide: data/Yale_HER2_cohort/SVS/Her2Neg_Case_17.svs
+2025-11-02 04:54:43,631 - INFO - Mask shape: (2079, 4641)
+2025-11-02 04:54:43,632 - INFO - Loaded WSI backend: cucim
+2025-11-02 04:54:43,652 - INFO - Skipping data/Yale_HER2_cohort/SVS/Her2Neg_Case_17.svs; found 61 existing patches in outputs/patches/Her2Neg_Case_17
+2025-11-02 04:54:43,746 - INFO - Processing slide: data/Yale_HER2_cohort/SVS/Her2Neg_Case_18.svs
+2025-11-02 04:54:43,788 - INFO - Mask shape: (5083, 6783)
+2025-11-02 04:54:43,789 - INFO - Loaded WSI backend: cucim
+2025-11-02 04:54:43,849 - INFO - Skipping data/Yale_HER2_cohort/SVS/Her2Neg_Case_18.svs; found 161 existing patches in outputs/patches/Her2Neg_Case_18
+2025-11-02 04:54:43,942 - INFO - Processing slide: data/Yale_HER2_cohort/SVS/Her2Neg_Case_19.svs
+2025-11-02 04:54:43,964 - INFO - Mask shape: (2448, 3213)
+2025-11-02 04:54:43,965 - INFO - Loaded WSI backend: cucim
+2025-11-02 04:54:44,027 - INFO - Skipping data/Yale_HER2_cohort/SVS/Her2Neg_Case_19.svs; found 132 existing patches in outputs/patches/Her2Neg_Case_19
+2025-11-02 04:54:44,122 - INFO - Processing slide: data/Yale_HER2_cohort/SVS/Her2Neg_Case_20.svs
+2025-11-02 04:54:44,141 - INFO - Mask shape: (3073, 2975)
+2025-11-02 04:54:44,141 - INFO - Loaded WSI backend: cucim
+2025-11-02 04:54:44,174 - INFO - Skipping data/Yale_HER2_cohort/SVS/Her2Neg_Case_20.svs; found 102 existing patches in outputs/patches/Her2Neg_Case_20
+2025-11-02 04:54:44,266 - INFO - Processing slide: data/Yale_HER2_cohort/SVS/Her2Neg_Case_21.svs
+2025-11-02 04:54:44,281 - INFO - Mask shape: (2694, 3332)
+2025-11-02 04:54:44,282 - INFO - Loaded WSI backend: cucim
+2025-11-02 04:54:44,358 - INFO - Skipping data/Yale_HER2_cohort/SVS/Her2Neg_Case_21.svs; found 187 existing patches in outputs/patches/Her2Neg_Case_21
+2025-11-02 04:54:44,450 - INFO - Processing slide: data/Yale_HER2_cohort/SVS/Her2Neg_Case_22.svs
+2025-11-02 04:54:44,476 - INFO - Mask shape: (5114, 7140)
+2025-11-02 04:54:44,478 - INFO - Loaded WSI backend: cucim
+2025-11-02 04:54:44,763 - INFO - Skipping data/Yale_HER2_cohort/SVS/Her2Neg_Case_22.svs; found 1043 existing patches in outputs/patches/Her2Neg_Case_22
+2025-11-02 04:54:44,855 - INFO - Processing slide: data/Yale_HER2_cohort/SVS/Her2Neg_Case_23.svs
+2025-11-02 04:54:44,873 - INFO - Mask shape: (4294, 4879)
+2025-11-02 04:54:44,873 - INFO - Loaded WSI backend: cucim
+2025-11-02 04:54:44,912 - INFO - Skipping data/Yale_HER2_cohort/SVS/Her2Neg_Case_23.svs; found 102 existing patches in outputs/patches/Her2Neg_Case_23
+2025-11-02 04:54:45,006 - INFO - Processing slide: data/Yale_HER2_cohort/SVS/Her2Neg_Case_24.svs
+2025-11-02 04:54:45,025 - INFO - Mask shape: (2940, 3808)
+2025-11-02 04:54:45,025 - INFO - Loaded WSI backend: cucim
+2025-11-02 04:54:45,099 - INFO - Skipping data/Yale_HER2_cohort/SVS/Her2Neg_Case_24.svs; found 206 existing patches in outputs/patches/Her2Neg_Case_24
+2025-11-02 04:54:45,192 - INFO - Processing slide: data/Yale_HER2_cohort/SVS/Her2Neg_Case_25.svs
+2025-11-02 04:54:45,221 - INFO - Mask shape: (3340, 2380)
+2025-11-02 04:54:45,221 - INFO - Loaded WSI backend: cucim
+2025-11-02 04:54:45,323 - INFO - Skipping data/Yale_HER2_cohort/SVS/Her2Neg_Case_25.svs; found 294 existing patches in outputs/patches/Her2Neg_Case_25
+2025-11-02 04:54:45,418 - INFO - Processing slide: data/Yale_HER2_cohort/SVS/Her2Neg_Case_26.svs
+2025-11-02 04:54:45,455 - INFO - Mask shape: (3381, 3808)
+2025-11-02 04:54:45,456 - INFO - Loaded WSI backend: cucim
+2025-11-02 04:54:45,537 - INFO - Skipping data/Yale_HER2_cohort/SVS/Her2Neg_Case_26.svs; found 181 existing patches in outputs/patches/Her2Neg_Case_26
+2025-11-02 04:54:45,633 - INFO - Processing slide: data/Yale_HER2_cohort/SVS/Her2Neg_Case_27.svs
+2025-11-02 04:54:45,668 - INFO - Mask shape: (2038, 2618)
+2025-11-02 04:54:45,668 - INFO - Loaded WSI backend: cucim
+2025-11-02 04:54:45,734 - INFO - Skipping data/Yale_HER2_cohort/SVS/Her2Neg_Case_27.svs; found 183 existing patches in outputs/patches/Her2Neg_Case_27
+2025-11-02 04:54:45,835 - INFO - Processing slide: data/Yale_HER2_cohort/SVS/Her2Neg_Case_28.svs
+2025-11-02 04:54:45,845 - INFO - Mask shape: (1658, 2499)
+2025-11-02 04:54:45,845 - INFO - Loaded WSI backend: cucim
+2025-11-02 04:54:45,865 - INFO - Skipping data/Yale_HER2_cohort/SVS/Her2Neg_Case_28.svs; found 58 existing patches in outputs/patches/Her2Neg_Case_28
+2025-11-02 04:54:45,958 - INFO - Processing slide: data/Yale_HER2_cohort/SVS/Her2Neg_Case_29.svs
+2025-11-02 04:54:45,977 - INFO - Mask shape: (2827, 4046)
+2025-11-02 04:54:45,977 - INFO - Loaded WSI backend: cucim
+2025-11-02 04:54:46,045 - INFO - Skipping data/Yale_HER2_cohort/SVS/Her2Neg_Case_29.svs; found 177 existing patches in outputs/patches/Her2Neg_Case_29
+2025-11-02 04:54:46,139 - INFO - Processing slide: data/Yale_HER2_cohort/SVS/Her2Neg_Case_30.svs
+2025-11-02 04:54:46,154 - INFO - Mask shape: (3761, 6664)
+2025-11-02 04:54:46,154 - INFO - Loaded WSI backend: cucim
+2025-11-02 04:54:46,238 - INFO - Skipping data/Yale_HER2_cohort/SVS/Her2Neg_Case_30.svs; found 266 existing patches in outputs/patches/Her2Neg_Case_30
+2025-11-02 04:54:46,336 - INFO - Processing slide: data/Yale_HER2_cohort/SVS/Her2Neg_Case_32.svs
+2025-11-02 04:54:46,353 - INFO - Mask shape: (4089, 4760)
+2025-11-02 04:54:46,353 - INFO - Loaded WSI backend: cucim
+2025-11-02 04:54:46,510 - INFO - Skipping data/Yale_HER2_cohort/SVS/Her2Neg_Case_32.svs; found 527 existing patches in outputs/patches/Her2Neg_Case_32
+2025-11-02 04:54:46,603 - INFO - Processing slide: data/Yale_HER2_cohort/SVS/Her2Neg_Case_33.svs
+2025-11-02 04:54:46,622 - INFO - Mask shape: (2233, 3808)
+2025-11-02 04:54:46,623 - INFO - Loaded WSI backend: cucim
+2025-11-02 04:54:46,632 - INFO - Skipping data/Yale_HER2_cohort/SVS/Her2Neg_Case_33.svs; found 21 existing patches in outputs/patches/Her2Neg_Case_33
+2025-11-02 04:54:46,724 - INFO - Processing slide: data/Yale_HER2_cohort/SVS/Her2Neg_Case_35.svs
+2025-11-02 04:54:46,753 - INFO - Mask shape: (2694, 2499)
+2025-11-02 04:54:46,753 - INFO - Loaded WSI backend: cucim
+2025-11-02 04:54:46,793 - INFO - Skipping data/Yale_HER2_cohort/SVS/Her2Neg_Case_35.svs; found 68 existing patches in outputs/patches/Her2Neg_Case_35
+2025-11-02 04:54:46,893 - INFO - Processing slide: data/Yale_HER2_cohort/SVS/Her2Neg_Case_36.svs
+2025-11-02 04:54:46,916 - INFO - Mask shape: (2192, 2856)
+2025-11-02 04:54:46,916 - INFO - Loaded WSI backend: cucim
+2025-11-02 04:54:46,934 - INFO - Skipping data/Yale_HER2_cohort/SVS/Her2Neg_Case_36.svs; found 44 existing patches in outputs/patches/Her2Neg_Case_36
+2025-11-02 04:54:47,027 - INFO - Processing slide: data/Yale_HER2_cohort/SVS/Her2Neg_Case_37.svs
+2025-11-02 04:54:47,066 - INFO - Mask shape: (4068, 5474)
+2025-11-02 04:54:47,066 - INFO - Loaded WSI backend: cucim
+2025-11-02 04:54:47,095 - INFO - Skipping data/Yale_HER2_cohort/SVS/Her2Neg_Case_37.svs; found 88 existing patches in outputs/patches/Her2Neg_Case_37
+2025-11-02 04:54:47,188 - INFO - Processing slide: data/Yale_HER2_cohort/SVS/Her2Neg_Case_38.svs
+2025-11-02 04:54:47,217 - INFO - Mask shape: (2971, 4284)
+2025-11-02 04:54:47,218 - INFO - Loaded WSI backend: cucim
+2025-11-02 04:54:47,292 - INFO - Skipping data/Yale_HER2_cohort/SVS/Her2Neg_Case_38.svs; found 217 existing patches in outputs/patches/Her2Neg_Case_38
+2025-11-02 04:54:47,385 - INFO - Processing slide: data/Yale_HER2_cohort/SVS/Her2Neg_Case_39.svs
+2025-11-02 04:54:47,412 - INFO - Mask shape: (3791, 5593)
+2025-11-02 04:54:47,412 - INFO - Loaded WSI backend: cucim
+2025-11-02 04:54:47,435 - INFO - Skipping data/Yale_HER2_cohort/SVS/Her2Neg_Case_39.svs; found 49 existing patches in outputs/patches/Her2Neg_Case_39
+2025-11-02 04:54:47,534 - INFO - Processing slide: data/Yale_HER2_cohort/SVS/Her2Neg_Case_40.svs
+2025-11-02 04:54:47,573 - INFO - Mask shape: (3402, 6664)
+2025-11-02 04:54:47,574 - INFO - Loaded WSI backend: cucim
+2025-11-02 04:54:47,652 - INFO - Skipping data/Yale_HER2_cohort/SVS/Her2Neg_Case_40.svs; found 221 existing patches in outputs/patches/Her2Neg_Case_40
+2025-11-02 04:54:47,747 - INFO - Processing slide: data/Yale_HER2_cohort/SVS/Her2Neg_Case_41.svs
+2025-11-02 04:54:47,791 - INFO - Mask shape: (2858, 3570)
+2025-11-02 04:54:47,792 - INFO - Loaded WSI backend: cucim
+2025-11-02 04:54:47,860 - INFO - Skipping data/Yale_HER2_cohort/SVS/Her2Neg_Case_41.svs; found 178 existing patches in outputs/patches/Her2Neg_Case_41
+2025-11-02 04:54:47,956 - INFO - Processing slide: data/Yale_HER2_cohort/SVS/Her2Neg_Case_42.svs
+2025-11-02 04:54:47,975 - INFO - Mask shape: (2653, 2380)
+2025-11-02 04:54:47,975 - INFO - Loaded WSI backend: cucim
+2025-11-02 04:54:48,050 - INFO - Skipping data/Yale_HER2_cohort/SVS/Her2Neg_Case_42.svs; found 90 existing patches in outputs/patches/Her2Neg_Case_42
+2025-11-02 04:54:48,144 - INFO - Processing slide: data/Yale_HER2_cohort/SVS/Her2Neg_Case_43.svs
+2025-11-02 04:54:48,167 - INFO - Mask shape: (3514, 3570)
+2025-11-02 04:54:48,167 - INFO - Loaded WSI backend: cucim
+2025-11-02 04:54:48,263 - INFO - Skipping data/Yale_HER2_cohort/SVS/Her2Neg_Case_43.svs; found 218 existing patches in outputs/patches/Her2Neg_Case_43
+2025-11-02 04:54:48,359 - INFO - Processing slide: data/Yale_HER2_cohort/SVS/Her2Neg_Case_44.svs
+2025-11-02 04:54:48,374 - INFO - Mask shape: (2971, 3213)
+2025-11-02 04:54:48,375 - INFO - Loaded WSI backend: cucim
+2025-11-02 04:54:48,473 - INFO - Skipping data/Yale_HER2_cohort/SVS/Her2Neg_Case_44.svs; found 280 existing patches in outputs/patches/Her2Neg_Case_44
+2025-11-02 04:54:48,566 - INFO - Processing slide: data/Yale_HER2_cohort/SVS/Her2Neg_Case_45.svs
+2025-11-02 04:54:48,597 - INFO - Mask shape: (3535, 3451)
+2025-11-02 04:54:48,599 - INFO - Loaded WSI backend: cucim
+2025-11-02 04:54:48,619 - INFO - Skipping data/Yale_HER2_cohort/SVS/Her2Neg_Case_45.svs; found 41 existing patches in outputs/patches/Her2Neg_Case_45
+2025-11-02 04:54:48,712 - INFO - Processing slide: data/Yale_HER2_cohort/SVS/Her2Neg_Case_46.svs
+2025-11-02 04:54:48,730 - INFO - Mask shape: (3524, 2975)
+2025-11-02 04:54:48,730 - INFO - Loaded WSI backend: cucim
+2025-11-02 04:54:48,755 - INFO - Skipping data/Yale_HER2_cohort/SVS/Her2Neg_Case_46.svs; found 58 existing patches in outputs/patches/Her2Neg_Case_46
+2025-11-02 04:54:48,849 - INFO - Processing slide: data/Yale_HER2_cohort/SVS/Her2Neg_Case_47.svs
+2025-11-02 04:54:48,868 - INFO - Mask shape: (4940, 5831)
+2025-11-02 04:54:48,869 - INFO - Loaded WSI backend: cucim
+2025-11-02 04:54:49,119 - INFO - Skipping data/Yale_HER2_cohort/SVS/Her2Neg_Case_47.svs; found 708 existing patches in outputs/patches/Her2Neg_Case_47
+2025-11-02 04:54:49,211 - INFO - Processing slide: data/Yale_HER2_cohort/SVS/Her2Neg_Case_48.svs
+2025-11-02 04:54:49,228 - INFO - Mask shape: (2786, 3094)
+2025-11-02 04:54:49,228 - INFO - Loaded WSI backend: cucim
+2025-11-02 04:54:49,300 - INFO - Skipping data/Yale_HER2_cohort/SVS/Her2Neg_Case_48.svs; found 233 existing patches in outputs/patches/Her2Neg_Case_48
+2025-11-02 04:54:49,391 - INFO - Processing slide: data/Yale_HER2_cohort/SVS/Her2Neg_Case_49.svs
+2025-11-02 04:54:49,408 - INFO - Mask shape: (5175, 4522)
+2025-11-02 04:54:49,408 - INFO - Loaded WSI backend: cucim
+2025-11-02 04:54:49,507 - INFO - Skipping data/Yale_HER2_cohort/SVS/Her2Neg_Case_49.svs; found 323 existing patches in outputs/patches/Her2Neg_Case_49
+2025-11-02 04:54:49,602 - INFO - Processing slide: data/Yale_HER2_cohort/SVS/Her2Neg_Case_50.svs
+2025-11-02 04:54:49,615 - INFO - Mask shape: (2653, 2261)
+2025-11-02 04:54:49,615 - INFO - Loaded WSI backend: cucim
+2025-11-02 04:54:49,676 - INFO - Skipping data/Yale_HER2_cohort/SVS/Her2Neg_Case_50.svs; found 158 existing patches in outputs/patches/Her2Neg_Case_50
+2025-11-02 04:54:49,771 - INFO - Processing slide: data/Yale_HER2_cohort/SVS/Her2Neg_Case_51.svs
+2025-11-02 04:54:49,801 - INFO - Mask shape: (2674, 4879)
+2025-11-02 04:54:49,801 - INFO - Loaded WSI backend: cucim
+2025-11-02 04:54:49,922 - INFO - Skipping data/Yale_HER2_cohort/SVS/Her2Neg_Case_51.svs; found 353 existing patches in outputs/patches/Her2Neg_Case_51
+2025-11-02 04:54:50,013 - INFO - Processing slide: data/Yale_HER2_cohort/SVS/Her2Neg_Case_52.svs
+2025-11-02 04:54:50,039 - INFO - Mask shape: (3033, 7378)
+2025-11-02 04:54:50,041 - INFO - Loaded WSI backend: cucim
+2025-11-02 04:54:50,052 - INFO - Skipping data/Yale_HER2_cohort/SVS/Her2Neg_Case_52.svs; found 36 existing patches in outputs/patches/Her2Neg_Case_52
+2025-11-02 04:54:50,144 - INFO - Processing slide: data/Yale_HER2_cohort/SVS/Her2Neg_Case_53.svs
+2025-11-02 04:54:50,162 - INFO - Mask shape: (4222, 3808)
+2025-11-02 04:54:50,163 - INFO - Loaded WSI backend: cucim
+2025-11-02 04:54:50,181 - INFO - Skipping data/Yale_HER2_cohort/SVS/Her2Neg_Case_53.svs; found 57 existing patches in outputs/patches/Her2Neg_Case_53
+2025-11-02 04:54:50,273 - INFO - Processing slide: data/Yale_HER2_cohort/SVS/Her2Neg_Case_54.svs
+2025-11-02 04:54:50,293 - INFO - Mask shape: (3853, 2737)
+2025-11-02 04:54:50,293 - INFO - Loaded WSI backend: cucim
+2025-11-02 04:54:50,328 - INFO - Skipping data/Yale_HER2_cohort/SVS/Her2Neg_Case_54.svs; found 103 existing patches in outputs/patches/Her2Neg_Case_54
+2025-11-02 04:54:50,420 - INFO - Processing slide: data/Yale_HER2_cohort/SVS/Her2Neg_Case_55.svs
+2025-11-02 04:54:50,450 - INFO - Mask shape: (4755, 6188)
+2025-11-02 04:54:50,450 - INFO - Loaded WSI backend: cucim
+2025-11-02 04:54:50,589 - INFO - Skipping data/Yale_HER2_cohort/SVS/Her2Neg_Case_55.svs; found 488 existing patches in outputs/patches/Her2Neg_Case_55
+2025-11-02 04:54:50,682 - INFO - Processing slide: data/Yale_HER2_cohort/SVS/Her2Neg_Case_56.svs
+2025-11-02 04:54:50,702 - INFO - Mask shape: (4099, 8330)
+2025-11-02 04:54:50,703 - INFO - Loaded WSI backend: cucim
+2025-11-02 04:54:50,733 - INFO - Skipping data/Yale_HER2_cohort/SVS/Her2Neg_Case_56.svs; found 110 existing patches in outputs/patches/Her2Neg_Case_56
+2025-11-02 04:54:50,826 - INFO - Processing slide: data/Yale_HER2_cohort/SVS/Her2Neg_Case_57.svs
+2025-11-02 04:54:50,855 - INFO - Mask shape: (3832, 3689)
+2025-11-02 04:54:50,856 - INFO - Loaded WSI backend: cucim
+2025-11-02 04:54:50,924 - INFO - Skipping data/Yale_HER2_cohort/SVS/Her2Neg_Case_57.svs; found 234 existing patches in outputs/patches/Her2Neg_Case_57
+2025-11-02 04:54:51,020 - INFO - Processing slide: data/Yale_HER2_cohort/SVS/Her2Neg_Case_58.svs
+2025-11-02 04:54:51,040 - INFO - Mask shape: (4355, 4998)
+2025-11-02 04:54:51,040 - INFO - Loaded WSI backend: cucim
+2025-11-02 04:54:51,086 - INFO - Skipping data/Yale_HER2_cohort/SVS/Her2Neg_Case_58.svs; found 141 existing patches in outputs/patches/Her2Neg_Case_58
+2025-11-02 04:54:51,175 - INFO - Processing slide: data/Yale_HER2_cohort/SVS/Her2Neg_Case_59.svs
+2025-11-02 04:54:51,196 - INFO - Mask shape: (2151, 2380)
+2025-11-02 04:54:51,198 - INFO - Loaded WSI backend: cucim
+2025-11-02 04:54:51,249 - INFO - Skipping data/Yale_HER2_cohort/SVS/Her2Neg_Case_59.svs; found 159 existing patches in outputs/patches/Her2Neg_Case_59
+2025-11-02 04:54:51,340 - INFO - Processing slide: data/Yale_HER2_cohort/SVS/Her2Neg_Case_60.svs
+2025-11-02 04:54:51,361 - INFO - Mask shape: (2971, 8687)
+2025-11-02 04:54:51,362 - INFO - Loaded WSI backend: cucim
+2025-11-02 04:54:51,398 - INFO - Skipping data/Yale_HER2_cohort/SVS/Her2Neg_Case_60.svs; found 127 existing patches in outputs/patches/Her2Neg_Case_60
+2025-11-02 04:54:51,491 - INFO - Processing slide: data/Yale_HER2_cohort/SVS/Her2Neg_Case_61.svs
+2025-11-02 04:54:51,512 - INFO - Mask shape: (3996, 5117)
+2025-11-02 04:54:51,513 - INFO - Loaded WSI backend: cucim
+2025-11-02 04:54:51,613 - INFO - Skipping data/Yale_HER2_cohort/SVS/Her2Neg_Case_61.svs; found 351 existing patches in outputs/patches/Her2Neg_Case_61
+2025-11-02 04:54:51,701 - INFO - Processing slide: data/Yale_HER2_cohort/SVS/Her2Neg_Case_62.svs
+2025-11-02 04:54:51,720 - INFO - Mask shape: (3586, 4165)
+2025-11-02 04:54:51,720 - INFO - Loaded WSI backend: cucim
+2025-11-02 04:54:51,748 - INFO - Skipping data/Yale_HER2_cohort/SVS/Her2Neg_Case_62.svs; found 75 existing patches in outputs/patches/Her2Neg_Case_62
+2025-11-02 04:54:51,841 - INFO - Processing slide: data/Yale_HER2_cohort/SVS/Her2Neg_Case_63.svs
+2025-11-02 04:54:51,864 - INFO - Mask shape: (3873, 2261)
+2025-11-02 04:54:51,864 - INFO - Loaded WSI backend: cucim
+2025-11-02 04:54:51,902 - INFO - Skipping data/Yale_HER2_cohort/SVS/Her2Neg_Case_63.svs; found 105 existing patches in outputs/patches/Her2Neg_Case_63
+2025-11-02 04:54:51,997 - INFO - Processing slide: data/Yale_HER2_cohort/SVS/Her2Neg_Case_64.svs
+2025-11-02 04:54:52,015 - INFO - Mask shape: (3525, 7735)
+2025-11-02 04:54:52,015 - INFO - Loaded WSI backend: cucim
+2025-11-02 04:54:52,166 - INFO - Skipping data/Yale_HER2_cohort/SVS/Her2Neg_Case_64.svs; found 521 existing patches in outputs/patches/Her2Neg_Case_64
+2025-11-02 04:54:52,258 - INFO - Processing slide: data/Yale_HER2_cohort/SVS/Her2Neg_Case_65.svs
+2025-11-02 04:54:52,279 - INFO - Mask shape: (1177, 2142)
+2025-11-02 04:54:52,279 - INFO - Loaded WSI backend: cucim
+2025-11-02 04:54:52,299 - INFO - Skipping data/Yale_HER2_cohort/SVS/Her2Neg_Case_65.svs; found 54 existing patches in outputs/patches/Her2Neg_Case_65
+2025-11-02 04:54:52,403 - INFO - Processing slide: data/Yale_HER2_cohort/SVS/Her2Neg_Case_66.svs
+2025-11-02 04:54:52,427 - INFO - Mask shape: (3586, 9163)
+2025-11-02 04:54:52,427 - INFO - Loaded WSI backend: cucim
+2025-11-02 04:54:52,610 - INFO - Skipping data/Yale_HER2_cohort/SVS/Her2Neg_Case_66.svs; found 524 existing patches in outputs/patches/Her2Neg_Case_66
+2025-11-02 04:54:52,707 - INFO - Processing slide: data/Yale_HER2_cohort/SVS/Her2Neg_Case_67.svs
+2025-11-02 04:54:52,744 - INFO - Mask shape: (4119, 4165)
+2025-11-02 04:54:52,744 - INFO - Loaded WSI backend: cucim
+2025-11-02 04:54:52,791 - INFO - Skipping data/Yale_HER2_cohort/SVS/Her2Neg_Case_67.svs; found 111 existing patches in outputs/patches/Her2Neg_Case_67
+2025-11-02 04:54:52,892 - INFO - Processing slide: data/Yale_HER2_cohort/SVS/Her2Neg_Case_68.svs
+2025-11-02 04:54:52,933 - INFO - Mask shape: (3863, 4284)
+2025-11-02 04:54:52,933 - INFO - Loaded WSI backend: cucim
+2025-11-02 04:54:52,994 - INFO - Skipping data/Yale_HER2_cohort/SVS/Her2Neg_Case_68.svs; found 172 existing patches in outputs/patches/Her2Neg_Case_68
+2025-11-02 04:54:53,091 - INFO - Processing slide: data/Yale_HER2_cohort/SVS/Her2Neg_Case_69.svs
+2025-11-02 04:54:53,117 - INFO - Mask shape: (2489, 4165)
+2025-11-02 04:54:53,117 - INFO - Loaded WSI backend: cucim
+2025-11-02 04:54:53,347 - INFO - Skipping data/Yale_HER2_cohort/SVS/Her2Neg_Case_69.svs; found 620 existing patches in outputs/patches/Her2Neg_Case_69
+2025-11-02 04:54:53,443 - INFO - Processing slide: data/Yale_HER2_cohort/SVS/Her2Neg_Case_70.svs
+2025-11-02 04:54:53,469 - INFO - Mask shape: (2950, 3570)
+2025-11-02 04:54:53,469 - INFO - Loaded WSI backend: cucim
+2025-11-02 04:54:53,568 - INFO - Skipping data/Yale_HER2_cohort/SVS/Her2Neg_Case_70.svs; found 249 existing patches in outputs/patches/Her2Neg_Case_70
+2025-11-02 04:54:53,665 - INFO - Processing slide: data/Yale_HER2_cohort/SVS/Her2Neg_Case_71.svs
+2025-11-02 04:54:53,701 - INFO - Mask shape: (5042, 5593)
+2025-11-02 04:54:53,702 - INFO - Loaded WSI backend: cucim
+2025-11-02 04:54:53,809 - INFO - Skipping data/Yale_HER2_cohort/SVS/Her2Neg_Case_71.svs; found 273 existing patches in outputs/patches/Her2Neg_Case_71
+2025-11-02 04:54:53,906 - INFO - Processing slide: data/Yale_HER2_cohort/SVS/Her2Neg_Case_72.svs
+2025-11-02 04:54:53,928 - INFO - Mask shape: (3740, 3689)
+2025-11-02 04:54:53,928 - INFO - Loaded WSI backend: cucim
+2025-11-02 04:54:53,983 - INFO - Skipping data/Yale_HER2_cohort/SVS/Her2Neg_Case_72.svs; found 169 existing patches in outputs/patches/Her2Neg_Case_72
+2025-11-02 04:54:54,078 - INFO - Processing slide: data/Yale_HER2_cohort/SVS/Her2Neg_Case_73.svs
+2025-11-02 04:54:54,101 - INFO - Mask shape: (2715, 2975)
+2025-11-02 04:54:54,102 - INFO - Loaded WSI backend: cucim
+2025-11-02 04:54:54,133 - INFO - Skipping data/Yale_HER2_cohort/SVS/Her2Neg_Case_73.svs; found 94 existing patches in outputs/patches/Her2Neg_Case_73
+2025-11-02 04:54:54,231 - INFO - Processing slide: data/Yale_HER2_cohort/SVS/Her2Neg_Case_74.svs
+2025-11-02 04:54:54,263 - INFO - Mask shape: (3822, 3451)
+2025-11-02 04:54:54,264 - INFO - Loaded WSI backend: cucim
+2025-11-02 04:54:54,298 - INFO - Skipping data/Yale_HER2_cohort/SVS/Her2Neg_Case_74.svs; found 112 existing patches in outputs/patches/Her2Neg_Case_74
+2025-11-02 04:54:54,390 - INFO - Processing slide: data/Yale_HER2_cohort/SVS/Her2Neg_Case_75.svs
+2025-11-02 04:54:54,417 - INFO - Mask shape: (4847, 6783)
+2025-11-02 04:54:54,418 - INFO - Loaded WSI backend: cucim
+2025-11-02 04:54:54,444 - INFO - Skipping data/Yale_HER2_cohort/SVS/Her2Neg_Case_75.svs; found 67 existing patches in outputs/patches/Her2Neg_Case_75
+2025-11-02 04:54:54,540 - INFO - Processing slide: data/Yale_HER2_cohort/SVS/Her2Neg_Case_76.svs
+2025-11-02 04:54:54,575 - INFO - Mask shape: (4314, 6664)
+2025-11-02 04:54:54,576 - INFO - Loaded WSI backend: cucim
+2025-11-02 04:54:54,698 - INFO - Skipping data/Yale_HER2_cohort/SVS/Her2Neg_Case_76.svs; found 407 existing patches in outputs/patches/Her2Neg_Case_76
+2025-11-02 04:54:54,792 - INFO - Processing slide: data/Yale_HER2_cohort/SVS/Her2Neg_Case_77.svs
+2025-11-02 04:54:54,820 - INFO - Mask shape: (2879, 4046)
+2025-11-02 04:54:54,820 - INFO - Loaded WSI backend: cucim
+2025-11-02 04:54:54,936 - INFO - Skipping data/Yale_HER2_cohort/SVS/Her2Neg_Case_77.svs; found 271 existing patches in outputs/patches/Her2Neg_Case_77
+2025-11-02 04:54:55,034 - INFO - Processing slide: data/Yale_HER2_cohort/SVS/Her2Neg_Case_78.svs
+2025-11-02 04:54:55,061 - INFO - Mask shape: (3145, 3927)
+2025-11-02 04:54:55,062 - INFO - Loaded WSI backend: cucim
+2025-11-02 04:54:55,122 - INFO - Skipping data/Yale_HER2_cohort/SVS/Her2Neg_Case_78.svs; found 54 existing patches in outputs/patches/Her2Neg_Case_78
+2025-11-02 04:54:55,243 - INFO - Processing slide: data/Yale_HER2_cohort/SVS/Her2Neg_Case_79.svs
+2025-11-02 04:54:55,271 - INFO - Mask shape: (1802, 2618)
+2025-11-02 04:54:55,271 - INFO - Loaded WSI backend: cucim
+2025-11-02 04:54:55,349 - INFO - Skipping data/Yale_HER2_cohort/SVS/Her2Neg_Case_79.svs; found 114 existing patches in outputs/patches/Her2Neg_Case_79
+2025-11-02 04:54:55,443 - INFO - Processing slide: data/Yale_HER2_cohort/SVS/Her2Neg_Case_80.svs
+2025-11-02 04:54:55,457 - INFO - Mask shape: (2756, 3094)
+2025-11-02 04:54:55,458 - INFO - Loaded WSI backend: cucim
+2025-11-02 04:54:55,508 - INFO - Skipping data/Yale_HER2_cohort/SVS/Her2Neg_Case_80.svs; found 146 existing patches in outputs/patches/Her2Neg_Case_80
+2025-11-02 04:54:55,609 - INFO - Processing slide: data/Yale_HER2_cohort/SVS/Her2Neg_Case_81.svs
+2025-11-02 04:54:55,632 - INFO - Mask shape: (3330, 2856)
+2025-11-02 04:54:55,632 - INFO - Loaded WSI backend: cucim
+2025-11-02 04:54:55,752 - INFO - Skipping data/Yale_HER2_cohort/SVS/Her2Neg_Case_81.svs; found 217 existing patches in outputs/patches/Her2Neg_Case_81
+2025-11-02 04:54:55,849 - INFO - Processing slide: data/Yale_HER2_cohort/SVS/Her2Neg_Case_82.svs
+2025-11-02 04:54:55,892 - INFO - Mask shape: (1884, 2380)
+2025-11-02 04:54:55,892 - INFO - Loaded WSI backend: cucim
+2025-11-02 04:54:55,963 - INFO - Skipping data/Yale_HER2_cohort/SVS/Her2Neg_Case_82.svs; found 175 existing patches in outputs/patches/Her2Neg_Case_82
+2025-11-02 04:54:56,062 - INFO - Processing slide: data/Yale_HER2_cohort/SVS/Her2Neg_Case_83.svs
+2025-11-02 04:54:56,113 - INFO - Mask shape: (5155, 5831)
+2025-11-02 04:54:56,114 - INFO - Loaded WSI backend: cucim
+2025-11-02 04:54:56,150 - INFO - Skipping data/Yale_HER2_cohort/SVS/Her2Neg_Case_83.svs; found 118 existing patches in outputs/patches/Her2Neg_Case_83
+2025-11-02 04:54:56,252 - INFO - Processing slide: data/Yale_HER2_cohort/SVS/Her2Neg_Case_84.svs
+2025-11-02 04:54:56,267 - INFO - Mask shape: (2263, 3570)
+2025-11-02 04:54:56,267 - INFO - Loaded WSI backend: cucim
+2025-11-02 04:54:56,302 - INFO - Skipping data/Yale_HER2_cohort/SVS/Her2Neg_Case_84.svs; found 77 existing patches in outputs/patches/Her2Neg_Case_84
+2025-11-02 04:54:56,398 - INFO - Processing slide: data/Yale_HER2_cohort/SVS/Her2Neg_Case_85.svs
+2025-11-02 04:54:56,436 - INFO - Mask shape: (5258, 6545)
+2025-11-02 04:54:56,436 - INFO - Loaded WSI backend: cucim
+2025-11-02 04:54:56,656 - INFO - Skipping data/Yale_HER2_cohort/SVS/Her2Neg_Case_85.svs; found 638 existing patches in outputs/patches/Her2Neg_Case_85
+2025-11-02 04:54:56,749 - INFO - Processing slide: data/Yale_HER2_cohort/SVS/Her2Neg_Case_86.svs
+2025-11-02 04:54:56,789 - INFO - Mask shape: (3473, 3570)
+2025-11-02 04:54:56,790 - INFO - Loaded WSI backend: cucim
+2025-11-02 04:54:56,842 - INFO - Skipping data/Yale_HER2_cohort/SVS/Her2Neg_Case_86.svs; found 126 existing patches in outputs/patches/Her2Neg_Case_86
+2025-11-02 04:54:56,946 - INFO - Processing slide: data/Yale_HER2_cohort/SVS/Her2Neg_Case_87.svs
+2025-11-02 04:54:56,967 - INFO - Mask shape: (4406, 5950)
+2025-11-02 04:54:56,968 - INFO - Loaded WSI backend: cucim
+2025-11-02 04:54:57,021 - INFO - Skipping data/Yale_HER2_cohort/SVS/Her2Neg_Case_87.svs; found 112 existing patches in outputs/patches/Her2Neg_Case_87
+2025-11-02 04:54:57,116 - INFO - Processing slide: data/Yale_HER2_cohort/SVS/Her2Neg_Case_88.svs
+2025-11-02 04:54:57,147 - INFO - Mask shape: (4027, 7021)
+2025-11-02 04:54:57,148 - INFO - Loaded WSI backend: cucim
+2025-11-02 04:54:57,323 - INFO - Skipping data/Yale_HER2_cohort/SVS/Her2Neg_Case_88.svs; found 405 existing patches in outputs/patches/Her2Neg_Case_88
+2025-11-02 04:54:57,419 - INFO - Processing slide: data/Yale_HER2_cohort/SVS/Her2Neg_Case_89.svs
+2025-11-02 04:54:57,447 - INFO - Mask shape: (4089, 5593)
+2025-11-02 04:54:57,447 - INFO - Loaded WSI backend: cucim
+2025-11-02 04:54:57,512 - INFO - Skipping data/Yale_HER2_cohort/SVS/Her2Neg_Case_89.svs; found 141 existing patches in outputs/patches/Her2Neg_Case_89
+2025-11-02 04:54:57,608 - INFO - Processing slide: data/Yale_HER2_cohort/SVS/Her2Neg_Case_90.svs
+2025-11-02 04:54:57,635 - INFO - Mask shape: (2909, 4403)
+2025-11-02 04:54:57,636 - INFO - Loaded WSI backend: cucim
+2025-11-02 04:54:57,728 - INFO - Skipping data/Yale_HER2_cohort/SVS/Her2Neg_Case_90.svs; found 310 existing patches in outputs/patches/Her2Neg_Case_90
+2025-11-02 04:54:57,824 - INFO - Processing slide: data/Yale_HER2_cohort/SVS/Her2Neg_Case_91.svs
+2025-11-02 04:54:57,858 - INFO - Mask shape: (2386, 3808)
+2025-11-02 04:54:57,858 - INFO - Loaded WSI backend: cucim
+2025-11-02 04:54:57,954 - INFO - Skipping data/Yale_HER2_cohort/SVS/Her2Neg_Case_91.svs; found 288 existing patches in outputs/patches/Her2Neg_Case_91
+2025-11-02 04:54:58,052 - INFO - Processing slide: data/Yale_HER2_cohort/SVS/Her2Neg_Case_92.svs
+2025-11-02 04:54:58,077 - INFO - Mask shape: (3258, 3570)
+2025-11-02 04:54:58,077 - INFO - Loaded WSI backend: cucim
+2025-11-02 04:54:58,174 - INFO - Skipping data/Yale_HER2_cohort/SVS/Her2Neg_Case_92.svs; found 321 existing patches in outputs/patches/Her2Neg_Case_92
+2025-11-02 04:54:58,282 - INFO - Processing slide: data/Yale_HER2_cohort/SVS/Her2Neg_Case_93.svs
+2025-11-02 04:54:58,305 - INFO - Mask shape: (3074, 4879)
+2025-11-02 04:54:58,306 - INFO - Loaded WSI backend: cucim
+2025-11-02 04:54:58,325 - INFO - Skipping data/Yale_HER2_cohort/SVS/Her2Neg_Case_93.svs; found 46 existing patches in outputs/patches/Her2Neg_Case_93
+2025-11-02 04:54:58,419 - INFO - Processing slide: data/Yale_HER2_cohort/SVS/Her2Neg_Case_94.svs
+2025-11-02 04:54:58,437 - INFO - Mask shape: (3545, 3451)
+2025-11-02 04:54:58,437 - INFO - Loaded WSI backend: cucim
+2025-11-02 04:54:58,481 - INFO - Skipping data/Yale_HER2_cohort/SVS/Her2Neg_Case_94.svs; found 142 existing patches in outputs/patches/Her2Neg_Case_94
+2025-11-02 04:54:58,576 - INFO - Processing slide: data/Yale_HER2_cohort/SVS/Her2Neg_Case_95.svs
+2025-11-02 04:54:58,599 - INFO - Mask shape: (3371, 4998)
+2025-11-02 04:54:58,599 - INFO - Loaded WSI backend: cucim
+2025-11-02 04:54:58,627 - INFO - Skipping data/Yale_HER2_cohort/SVS/Her2Neg_Case_95.svs; found 93 existing patches in outputs/patches/Her2Neg_Case_95
+2025-11-02 04:54:58,725 - INFO - Processing slide: data/Yale_HER2_cohort/SVS/Her2Neg_Case_96.svs
+2025-11-02 04:54:58,751 - INFO - Mask shape: (3668, 4522)
+2025-11-02 04:54:58,751 - INFO - Loaded WSI backend: cucim
+2025-11-02 04:54:58,854 - INFO - Skipping data/Yale_HER2_cohort/SVS/Her2Neg_Case_96.svs; found 305 existing patches in outputs/patches/Her2Neg_Case_96
+2025-11-02 04:54:58,951 - INFO - Processing slide: data/Yale_HER2_cohort/SVS/Her2Neg_Case_97.svs
+2025-11-02 04:54:58,974 - INFO - Mask shape: (3063, 3451)
+2025-11-02 04:54:58,975 - INFO - Loaded WSI backend: cucim
+2025-11-02 04:54:59,020 - INFO - Skipping data/Yale_HER2_cohort/SVS/Her2Neg_Case_97.svs; found 127 existing patches in outputs/patches/Her2Neg_Case_97
+2025-11-02 04:54:59,115 - INFO - Processing slide: data/Yale_HER2_cohort/SVS/Her2Neg_Case_98.svs
+2025-11-02 04:54:59,133 - INFO - Mask shape: (1966, 2737)
+2025-11-02 04:54:59,134 - INFO - Loaded WSI backend: cucim
+2025-11-02 04:54:59,160 - INFO - Skipping data/Yale_HER2_cohort/SVS/Her2Neg_Case_98.svs; found 83 existing patches in outputs/patches/Her2Neg_Case_98
+2025-11-02 04:54:59,255 - INFO - Processing slide: data/Yale_HER2_cohort/SVS/Her2Neg_Case_99.svs
+2025-11-02 04:54:59,279 - INFO - Mask shape: (3976, 3332)
+2025-11-02 04:54:59,279 - INFO - Loaded WSI backend: cucim
+2025-11-02 04:54:59,333 - INFO - Skipping data/Yale_HER2_cohort/SVS/Her2Neg_Case_99.svs; found 94 existing patches in outputs/patches/Her2Neg_Case_99
+2025-11-02 04:54:59,435 - INFO - Processing slide: data/Yale_HER2_cohort/SVS/Her2Pos_Case_01.svs
+2025-11-02 04:54:59,455 - INFO - Mask shape: (3135, 2975)
+2025-11-02 04:54:59,455 - INFO - Loaded WSI backend: cucim
+2025-11-02 04:54:59,504 - INFO - Skipping data/Yale_HER2_cohort/SVS/Her2Pos_Case_01.svs; found 162 existing patches in outputs/patches/Her2Pos_Case_01
+2025-11-02 04:54:59,599 - INFO - Processing slide: data/Yale_HER2_cohort/SVS/Her2Pos_Case_02.svs
+2025-11-02 04:54:59,619 - INFO - Mask shape: (3381, 3689)
+2025-11-02 04:54:59,620 - INFO - Loaded WSI backend: cucim
+2025-11-02 04:54:59,629 - INFO - Skipping data/Yale_HER2_cohort/SVS/Her2Pos_Case_02.svs; found 12 existing patches in outputs/patches/Her2Pos_Case_02
+2025-11-02 04:54:59,728 - INFO - Processing slide: data/Yale_HER2_cohort/SVS/Her2Pos_Case_03.svs
+2025-11-02 04:54:59,751 - INFO - Mask shape: (2243, 3332)
+2025-11-02 04:54:59,751 - INFO - Loaded WSI backend: cucim
+2025-11-02 04:54:59,834 - INFO - Skipping data/Yale_HER2_cohort/SVS/Her2Pos_Case_03.svs; found 292 existing patches in outputs/patches/Her2Pos_Case_03
+2025-11-02 04:54:59,930 - INFO - Processing slide: data/Yale_HER2_cohort/SVS/Her2Pos_Case_04.svs
+2025-11-02 04:54:59,950 - INFO - Mask shape: (2489, 2142)
+2025-11-02 04:54:59,950 - INFO - Loaded WSI backend: cucim
+2025-11-02 04:55:00,013 - INFO - Skipping data/Yale_HER2_cohort/SVS/Her2Pos_Case_04.svs; found 168 existing patches in outputs/patches/Her2Pos_Case_04
+2025-11-02 04:55:00,109 - INFO - Processing slide: data/Yale_HER2_cohort/SVS/Her2Pos_Case_05.svs
+2025-11-02 04:55:00,133 - INFO - Mask shape: (3289, 2380)
+2025-11-02 04:55:00,135 - INFO - Loaded WSI backend: cucim
+2025-11-02 04:55:00,152 - INFO - Skipping data/Yale_HER2_cohort/SVS/Her2Pos_Case_05.svs; found 37 existing patches in outputs/patches/Her2Pos_Case_05
+2025-11-02 04:55:00,245 - INFO - Processing slide: data/Yale_HER2_cohort/SVS/Her2Pos_Case_06.svs
+2025-11-02 04:55:00,269 - INFO - Mask shape: (3381, 7735)
+2025-11-02 04:55:00,269 - INFO - Loaded WSI backend: cucim
+2025-11-02 04:55:00,282 - INFO - Skipping data/Yale_HER2_cohort/SVS/Her2Pos_Case_06.svs; found 24 existing patches in outputs/patches/Her2Pos_Case_06
+2025-11-02 04:55:00,381 - INFO - Processing slide: data/Yale_HER2_cohort/SVS/Her2Pos_Case_07.svs
+2025-11-02 04:55:00,413 - INFO - Mask shape: (3207, 4403)
+2025-11-02 04:55:00,413 - INFO - Loaded WSI backend: cucim
+2025-11-02 04:55:00,442 - INFO - Skipping data/Yale_HER2_cohort/SVS/Her2Pos_Case_07.svs; found 64 existing patches in outputs/patches/Her2Pos_Case_07
+2025-11-02 04:55:00,545 - INFO - Processing slide: data/Yale_HER2_cohort/SVS/Her2Pos_Case_08.svs
+2025-11-02 04:55:00,570 - INFO - Mask shape: (2530, 3689)
+2025-11-02 04:55:00,570 - INFO - Loaded WSI backend: cucim
+2025-11-02 04:55:00,618 - INFO - Skipping data/Yale_HER2_cohort/SVS/Her2Pos_Case_08.svs; found 142 existing patches in outputs/patches/Her2Pos_Case_08
+2025-11-02 04:55:00,714 - INFO - Processing slide: data/Yale_HER2_cohort/SVS/Her2Pos_Case_09.svs
+2025-11-02 04:55:00,737 - INFO - Mask shape: (2766, 3451)
+2025-11-02 04:55:00,738 - INFO - Loaded WSI backend: cucim
+2025-11-02 04:55:00,780 - INFO - Skipping data/Yale_HER2_cohort/SVS/Her2Pos_Case_09.svs; found 127 existing patches in outputs/patches/Her2Pos_Case_09
+2025-11-02 04:55:00,877 - INFO - Processing slide: data/Yale_HER2_cohort/SVS/Her2Pos_Case_10.svs
+2025-11-02 04:55:00,901 - INFO - Mask shape: (3771, 7259)
+2025-11-02 04:55:00,902 - INFO - Loaded WSI backend: cucim
+2025-11-02 04:55:00,926 - INFO - Skipping data/Yale_HER2_cohort/SVS/Her2Pos_Case_10.svs; found 42 existing patches in outputs/patches/Her2Pos_Case_10
+2025-11-02 04:55:01,026 - INFO - Processing slide: data/Yale_HER2_cohort/SVS/Her2Pos_Case_11.svs
+2025-11-02 04:55:01,042 - INFO - Mask shape: (3842, 3927)
+2025-11-02 04:55:01,042 - INFO - Loaded WSI backend: cucim
+2025-11-02 04:55:01,088 - INFO - Skipping data/Yale_HER2_cohort/SVS/Her2Pos_Case_11.svs; found 136 existing patches in outputs/patches/Her2Pos_Case_11
+2025-11-02 04:55:01,180 - INFO - Processing slide: data/Yale_HER2_cohort/SVS/Her2Pos_Case_12.svs
+2025-11-02 04:55:01,200 - INFO - Mask shape: (3607, 2856)
+2025-11-02 04:55:01,201 - INFO - Loaded WSI backend: cucim
+2025-11-02 04:55:01,220 - INFO - Skipping data/Yale_HER2_cohort/SVS/Her2Pos_Case_12.svs; found 23 existing patches in outputs/patches/Her2Pos_Case_12
+2025-11-02 04:55:01,314 - INFO - Processing slide: data/Yale_HER2_cohort/SVS/Her2Pos_Case_13.svs
+2025-11-02 04:55:01,346 - INFO - Mask shape: (3771, 4284)
+2025-11-02 04:55:01,346 - INFO - Loaded WSI backend: cucim
+2025-11-02 04:55:01,435 - INFO - Skipping data/Yale_HER2_cohort/SVS/Her2Pos_Case_13.svs; found 277 existing patches in outputs/patches/Her2Pos_Case_13
+2025-11-02 04:55:01,545 - INFO - Processing slide: data/Yale_HER2_cohort/SVS/Her2Pos_Case_14.svs
+2025-11-02 04:55:01,561 - INFO - Mask shape: (1412, 1547)
+2025-11-02 04:55:01,562 - INFO - Loaded WSI backend: cucim
+2025-11-02 04:55:01,606 - INFO - Skipping data/Yale_HER2_cohort/SVS/Her2Pos_Case_14.svs; found 79 existing patches in outputs/patches/Her2Pos_Case_14
+2025-11-02 04:55:01,700 - INFO - Processing slide: data/Yale_HER2_cohort/SVS/Her2Pos_Case_15.svs
+2025-11-02 04:55:01,724 - INFO - Mask shape: (4017, 2975)
+2025-11-02 04:55:01,724 - INFO - Loaded WSI backend: cucim
+2025-11-02 04:55:01,769 - INFO - Skipping data/Yale_HER2_cohort/SVS/Her2Pos_Case_15.svs; found 89 existing patches in outputs/patches/Her2Pos_Case_15
+2025-11-02 04:55:01,868 - INFO - Processing slide: data/Yale_HER2_cohort/SVS/Her2Pos_Case_16.svs
+2025-11-02 04:55:01,888 - INFO - Mask shape: (3401, 3451)
+2025-11-02 04:55:01,888 - INFO - Loaded WSI backend: cucim
+2025-11-02 04:55:01,931 - INFO - Skipping data/Yale_HER2_cohort/SVS/Her2Pos_Case_16.svs; found 131 existing patches in outputs/patches/Her2Pos_Case_16
+2025-11-02 04:55:02,024 - INFO - Processing slide: data/Yale_HER2_cohort/SVS/Her2Pos_Case_17.svs
+2025-11-02 04:55:02,049 - INFO - Mask shape: (2192, 4046)
+2025-11-02 04:55:02,049 - INFO - Loaded WSI backend: cucim
+2025-11-02 04:55:02,150 - INFO - Skipping data/Yale_HER2_cohort/SVS/Her2Pos_Case_17.svs; found 232 existing patches in outputs/patches/Her2Pos_Case_17
+2025-11-02 04:55:02,249 - INFO - Processing slide: data/Yale_HER2_cohort/SVS/Her2Pos_Case_18.svs
+2025-11-02 04:55:02,275 - INFO - Mask shape: (2653, 3213)
+2025-11-02 04:55:02,275 - INFO - Loaded WSI backend: cucim
+2025-11-02 04:55:02,288 - INFO - Skipping data/Yale_HER2_cohort/SVS/Her2Pos_Case_18.svs; found 23 existing patches in outputs/patches/Her2Pos_Case_18
+2025-11-02 04:55:02,381 - INFO - Processing slide: data/Yale_HER2_cohort/SVS/Her2Pos_Case_19.svs
+2025-11-02 04:55:02,400 - INFO - Mask shape: (1915, 7973)
+2025-11-02 04:55:02,400 - INFO - Loaded WSI backend: cucim
+2025-11-02 04:55:02,495 - INFO - Skipping data/Yale_HER2_cohort/SVS/Her2Pos_Case_19.svs; found 257 existing patches in outputs/patches/Her2Pos_Case_19
+2025-11-02 04:55:02,601 - INFO - Processing slide: data/Yale_HER2_cohort/SVS/Her2Pos_Case_20.svs
+2025-11-02 04:55:02,618 - INFO - Mask shape: (2633, 8092)
+2025-11-02 04:55:02,618 - INFO - Loaded WSI backend: cucim
+2025-11-02 04:55:02,642 - INFO - Skipping data/Yale_HER2_cohort/SVS/Her2Pos_Case_20.svs; found 58 existing patches in outputs/patches/Her2Pos_Case_20
+2025-11-02 04:55:02,736 - INFO - Processing slide: data/Yale_HER2_cohort/SVS/Her2Pos_Case_21.svs
+2025-11-02 04:55:02,752 - INFO - Mask shape: (2458, 4165)
+2025-11-02 04:55:02,753 - INFO - Loaded WSI backend: cucim
+2025-11-02 04:55:02,798 - INFO - Skipping data/Yale_HER2_cohort/SVS/Her2Pos_Case_21.svs; found 127 existing patches in outputs/patches/Her2Pos_Case_21
+2025-11-02 04:55:02,889 - INFO - Processing slide: data/Yale_HER2_cohort/SVS/Her2Pos_Case_23.svs
+2025-11-02 04:55:02,912 - INFO - Mask shape: (2673, 2618)
+2025-11-02 04:55:02,912 - INFO - Loaded WSI backend: cucim
+2025-11-02 04:55:02,943 - INFO - Skipping data/Yale_HER2_cohort/SVS/Her2Pos_Case_23.svs; found 70 existing patches in outputs/patches/Her2Pos_Case_23
+2025-11-02 04:55:03,042 - INFO - Processing slide: data/Yale_HER2_cohort/SVS/Her2Pos_Case_24.svs
+2025-11-02 04:55:03,074 - INFO - Mask shape: (3094, 4522)
+2025-11-02 04:55:03,074 - INFO - Loaded WSI backend: cucim
+2025-11-02 04:55:03,131 - INFO - Skipping data/Yale_HER2_cohort/SVS/Her2Pos_Case_24.svs; found 161 existing patches in outputs/patches/Her2Pos_Case_24
+2025-11-02 04:55:03,227 - INFO - Processing slide: data/Yale_HER2_cohort/SVS/Her2Pos_Case_25.svs
+2025-11-02 04:55:03,258 - INFO - Mask shape: (3514, 4760)
+2025-11-02 04:55:03,258 - INFO - Loaded WSI backend: cucim
+2025-11-02 04:55:03,400 - INFO - Skipping data/Yale_HER2_cohort/SVS/Her2Pos_Case_25.svs; found 335 existing patches in outputs/patches/Her2Pos_Case_25
+2025-11-02 04:55:03,502 - INFO - Processing slide: data/Yale_HER2_cohort/SVS/Her2Pos_Case_26.svs
+2025-11-02 04:55:03,523 - INFO - Mask shape: (3535, 6902)
+2025-11-02 04:55:03,523 - INFO - Loaded WSI backend: cucim
+2025-11-02 04:55:03,563 - INFO - Skipping data/Yale_HER2_cohort/SVS/Her2Pos_Case_26.svs; found 111 existing patches in outputs/patches/Her2Pos_Case_26
+2025-11-02 04:55:03,656 - INFO - Processing slide: data/Yale_HER2_cohort/SVS/Her2Pos_Case_28.svs
+2025-11-02 04:55:03,688 - INFO - Mask shape: (2376, 2975)
+2025-11-02 04:55:03,689 - INFO - Loaded WSI backend: cucim
+2025-11-02 04:55:03,717 - INFO - Skipping data/Yale_HER2_cohort/SVS/Her2Pos_Case_28.svs; found 47 existing patches in outputs/patches/Her2Pos_Case_28
+2025-11-02 04:55:03,822 - INFO - Processing slide: data/Yale_HER2_cohort/SVS/Her2Pos_Case_29.svs
+2025-11-02 04:55:03,851 - INFO - Mask shape: (3863, 3451)
+2025-11-02 04:55:03,851 - INFO - Loaded WSI backend: cucim
+2025-11-02 04:55:03,870 - INFO - Skipping data/Yale_HER2_cohort/SVS/Her2Pos_Case_29.svs; found 46 existing patches in outputs/patches/Her2Pos_Case_29
+2025-11-02 04:55:03,964 - INFO - Processing slide: data/Yale_HER2_cohort/SVS/Her2Pos_Case_30.svs
+2025-11-02 04:55:03,990 - INFO - Mask shape: (2868, 2380)
+2025-11-02 04:55:03,990 - INFO - Loaded WSI backend: cucim
+2025-11-02 04:55:04,027 - INFO - Skipping data/Yale_HER2_cohort/SVS/Her2Pos_Case_30.svs; found 92 existing patches in outputs/patches/Her2Pos_Case_30
+2025-11-02 04:55:04,118 - INFO - Processing slide: data/Yale_HER2_cohort/SVS/Her2Pos_Case_31.svs
+2025-11-02 04:55:04,144 - INFO - Mask shape: (2140, 2023)
+2025-11-02 04:55:04,144 - INFO - Loaded WSI backend: cucim
+2025-11-02 04:55:04,160 - INFO - Skipping data/Yale_HER2_cohort/SVS/Her2Pos_Case_31.svs; found 20 existing patches in outputs/patches/Her2Pos_Case_31
+2025-11-02 04:55:04,251 - INFO - Processing slide: data/Yale_HER2_cohort/SVS/Her2Pos_Case_32.svs
+2025-11-02 04:55:04,283 - INFO - Mask shape: (2981, 4760)
+2025-11-02 04:55:04,284 - INFO - Loaded WSI backend: cucim
+2025-11-02 04:55:04,347 - INFO - Skipping data/Yale_HER2_cohort/SVS/Her2Pos_Case_32.svs; found 136 existing patches in outputs/patches/Her2Pos_Case_32
+2025-11-02 04:55:04,444 - INFO - Processing slide: data/Yale_HER2_cohort/SVS/Her2Pos_Case_33.svs
+2025-11-02 04:55:04,467 - INFO - Mask shape: (2714, 2737)
+2025-11-02 04:55:04,467 - INFO - Loaded WSI backend: cucim
+2025-11-02 04:55:04,494 - INFO - Skipping data/Yale_HER2_cohort/SVS/Her2Pos_Case_33.svs; found 14 existing patches in outputs/patches/Her2Pos_Case_33
+2025-11-02 04:55:04,587 - INFO - Processing slide: data/Yale_HER2_cohort/SVS/Her2Pos_Case_34.svs
+2025-11-02 04:55:04,623 - INFO - Mask shape: (3022, 3808)
+2025-11-02 04:55:04,624 - INFO - Loaded WSI backend: cucim
+2025-11-02 04:55:04,694 - INFO - Skipping data/Yale_HER2_cohort/SVS/Her2Pos_Case_34.svs; found 184 existing patches in outputs/patches/Her2Pos_Case_34
+2025-11-02 04:55:04,790 - INFO - Processing slide: data/Yale_HER2_cohort/SVS/Her2Pos_Case_35.svs
+2025-11-02 04:55:04,811 - INFO - Mask shape: (2017, 2142)
+2025-11-02 04:55:04,812 - INFO - Loaded WSI backend: cucim
+2025-11-02 04:55:04,865 - INFO - Skipping data/Yale_HER2_cohort/SVS/Her2Pos_Case_35.svs; found 108 existing patches in outputs/patches/Her2Pos_Case_35
+2025-11-02 04:55:04,960 - INFO - Processing slide: data/Yale_HER2_cohort/SVS/Her2Pos_Case_36.svs
+2025-11-02 04:55:04,977 - INFO - Mask shape: (5452, 5950)
+2025-11-02 04:55:04,977 - INFO - Loaded WSI backend: cucim
+2025-11-02 04:55:05,192 - INFO - Skipping data/Yale_HER2_cohort/SVS/Her2Pos_Case_36.svs; found 501 existing patches in outputs/patches/Her2Pos_Case_36
+2025-11-02 04:55:05,289 - INFO - Processing slide: data/Yale_HER2_cohort/SVS/Her2Pos_Case_37.svs
+2025-11-02 04:55:05,339 - INFO - Mask shape: (5083, 7378)
+2025-11-02 04:55:05,340 - INFO - Loaded WSI backend: cucim
+2025-11-02 04:55:05,502 - INFO - Skipping data/Yale_HER2_cohort/SVS/Her2Pos_Case_37.svs; found 428 existing patches in outputs/patches/Her2Pos_Case_37
+2025-11-02 04:55:05,594 - INFO - Processing slide: data/Yale_HER2_cohort/SVS/Her2Pos_Case_38.svs
+2025-11-02 04:55:05,625 - INFO - Mask shape: (4017, 4760)
+2025-11-02 04:55:05,626 - INFO - Loaded WSI backend: cucim
+2025-11-02 04:55:05,709 - INFO - Skipping data/Yale_HER2_cohort/SVS/Her2Pos_Case_38.svs; found 224 existing patches in outputs/patches/Her2Pos_Case_38
+2025-11-02 04:55:05,807 - INFO - Processing slide: data/Yale_HER2_cohort/SVS/Her2Pos_Case_39.svs
+2025-11-02 04:55:05,827 - INFO - Mask shape: (2376, 3094)
+2025-11-02 04:55:05,827 - INFO - Loaded WSI backend: cucim
+2025-11-02 04:55:05,854 - INFO - Skipping data/Yale_HER2_cohort/SVS/Her2Pos_Case_39.svs; found 59 existing patches in outputs/patches/Her2Pos_Case_39
+2025-11-02 04:55:05,945 - INFO - Processing slide: data/Yale_HER2_cohort/SVS/Her2Pos_Case_40.svs
+2025-11-02 04:55:05,976 - INFO - Mask shape: (3812, 4760)
+2025-11-02 04:55:05,976 - INFO - Loaded WSI backend: cucim
+2025-11-02 04:55:06,205 - INFO - Skipping data/Yale_HER2_cohort/SVS/Her2Pos_Case_40.svs; found 610 existing patches in outputs/patches/Her2Pos_Case_40
+2025-11-02 04:55:06,299 - INFO - Processing slide: data/Yale_HER2_cohort/SVS/Her2Pos_Case_41.svs
+2025-11-02 04:55:06,337 - INFO - Mask shape: (2448, 4284)
+2025-11-02 04:55:06,338 - INFO - Loaded WSI backend: cucim
+2025-11-02 04:55:06,480 - INFO - Skipping data/Yale_HER2_cohort/SVS/Her2Pos_Case_41.svs; found 281 existing patches in outputs/patches/Her2Pos_Case_41
+2025-11-02 04:55:06,573 - INFO - Processing slide: data/Yale_HER2_cohort/SVS/Her2Pos_Case_42.svs
+2025-11-02 04:55:06,612 - INFO - Mask shape: (2797, 9282)
+2025-11-02 04:55:06,613 - INFO - Loaded WSI backend: cucim
+2025-11-02 04:55:06,724 - INFO - Skipping data/Yale_HER2_cohort/SVS/Her2Pos_Case_42.svs; found 311 existing patches in outputs/patches/Her2Pos_Case_42
+2025-11-02 04:55:06,820 - INFO - Processing slide: data/Yale_HER2_cohort/SVS/Her2Pos_Case_43.svs
+2025-11-02 04:55:06,848 - INFO - Mask shape: (1669, 2499)
+2025-11-02 04:55:06,848 - INFO - Loaded WSI backend: cucim
+2025-11-02 04:55:06,875 - INFO - Skipping data/Yale_HER2_cohort/SVS/Her2Pos_Case_43.svs; found 80 existing patches in outputs/patches/Her2Pos_Case_43
+2025-11-02 04:55:06,970 - INFO - Processing slide: data/Yale_HER2_cohort/SVS/Her2Pos_Case_44.svs
+2025-11-02 04:55:06,996 - INFO - Mask shape: (2725, 3570)
+2025-11-02 04:55:06,996 - INFO - Loaded WSI backend: cucim
+2025-11-02 04:55:07,042 - INFO - Skipping data/Yale_HER2_cohort/SVS/Her2Pos_Case_44.svs; found 137 existing patches in outputs/patches/Her2Pos_Case_44
+2025-11-02 04:55:07,137 - INFO - Processing slide: data/Yale_HER2_cohort/SVS/Her2Pos_Case_46.svs
+2025-11-02 04:55:07,177 - INFO - Mask shape: (3904, 5474)
+2025-11-02 04:55:07,178 - INFO - Loaded WSI backend: cucim
+2025-11-02 04:55:07,300 - INFO - Skipping data/Yale_HER2_cohort/SVS/Her2Pos_Case_46.svs; found 348 existing patches in outputs/patches/Her2Pos_Case_46
+2025-11-02 04:55:07,401 - INFO - Processing slide: data/Yale_HER2_cohort/SVS/Her2Pos_Case_47.svs
+2025-11-02 04:55:07,435 - INFO - Mask shape: (2007, 5117)
+2025-11-02 04:55:07,436 - INFO - Loaded WSI backend: cucim
+2025-11-02 04:55:07,572 - INFO - Skipping data/Yale_HER2_cohort/SVS/Her2Pos_Case_47.svs; found 360 existing patches in outputs/patches/Her2Pos_Case_47
+2025-11-02 04:55:07,672 - INFO - Processing slide: data/Yale_HER2_cohort/SVS/Her2Pos_Case_48.svs
+2025-11-02 04:55:07,698 - INFO - Mask shape: (3361, 3808)
+2025-11-02 04:55:07,698 - INFO - Loaded WSI backend: cucim
+2025-11-02 04:55:07,713 - INFO - Skipping data/Yale_HER2_cohort/SVS/Her2Pos_Case_48.svs; found 28 existing patches in outputs/patches/Her2Pos_Case_48
+2025-11-02 04:55:07,805 - INFO - Processing slide: data/Yale_HER2_cohort/SVS/Her2Pos_Case_49.svs
+2025-11-02 04:55:07,836 - INFO - Mask shape: (3658, 4522)
+2025-11-02 04:55:07,836 - INFO - Loaded WSI backend: cucim
+2025-11-02 04:55:08,090 - INFO - Skipping data/Yale_HER2_cohort/SVS/Her2Pos_Case_49.svs; found 772 existing patches in outputs/patches/Her2Pos_Case_49
+2025-11-02 04:55:08,181 - INFO - Processing slide: data/Yale_HER2_cohort/SVS/Her2Pos_Case_50.svs
+2025-11-02 04:55:08,213 - INFO - Mask shape: (1771, 2261)
+2025-11-02 04:55:08,213 - INFO - Loaded WSI backend: cucim
+2025-11-02 04:55:08,226 - INFO - Skipping data/Yale_HER2_cohort/SVS/Her2Pos_Case_50.svs; found 30 existing patches in outputs/patches/Her2Pos_Case_50
+2025-11-02 04:55:08,318 - INFO - Processing slide: data/Yale_HER2_cohort/SVS/Her2Pos_Case_51.svs
+2025-11-02 04:55:08,352 - INFO - Mask shape: (2715, 4760)
+2025-11-02 04:55:08,353 - INFO - Loaded WSI backend: cucim
+2025-11-02 04:55:08,430 - INFO - Skipping data/Yale_HER2_cohort/SVS/Her2Pos_Case_51.svs; found 167 existing patches in outputs/patches/Her2Pos_Case_51
+2025-11-02 04:55:08,528 - INFO - Processing slide: data/Yale_HER2_cohort/SVS/Her2Pos_Case_53.svs
+2025-11-02 04:55:08,551 - INFO - Mask shape: (4601, 6902)
+2025-11-02 04:55:08,552 - INFO - Loaded WSI backend: cucim
+2025-11-02 04:55:08,613 - INFO - Skipping data/Yale_HER2_cohort/SVS/Her2Pos_Case_53.svs; found 158 existing patches in outputs/patches/Her2Pos_Case_53
+2025-11-02 04:55:08,707 - INFO - Processing slide: data/Yale_HER2_cohort/SVS/Her2Pos_Case_54.svs
+2025-11-02 04:55:08,740 - INFO - Mask shape: (4017, 3332)
+2025-11-02 04:55:08,741 - INFO - Loaded WSI backend: cucim
+2025-11-02 04:55:08,921 - INFO - Skipping data/Yale_HER2_cohort/SVS/Her2Pos_Case_54.svs; found 473 existing patches in outputs/patches/Her2Pos_Case_54
+2025-11-02 04:55:09,013 - INFO - Processing slide: data/Yale_HER2_cohort/SVS/Her2Pos_Case_55.svs
+2025-11-02 04:55:09,032 - INFO - Mask shape: (746, 2618)
+2025-11-02 04:55:09,032 - INFO - Loaded WSI backend: cucim
+2025-11-02 04:55:09,094 - INFO - Skipping data/Yale_HER2_cohort/SVS/Her2Pos_Case_55.svs; found 97 existing patches in outputs/patches/Her2Pos_Case_55
+2025-11-02 04:55:09,190 - INFO - Processing slide: data/Yale_HER2_cohort/SVS/Her2Pos_Case_56.svs
+2025-11-02 04:55:09,220 - INFO - Mask shape: (3422, 3213)
+2025-11-02 04:55:09,220 - INFO - Loaded WSI backend: cucim
+2025-11-02 04:55:09,268 - INFO - Skipping data/Yale_HER2_cohort/SVS/Her2Pos_Case_56.svs; found 110 existing patches in outputs/patches/Her2Pos_Case_56
+2025-11-02 04:55:09,361 - INFO - Processing slide: data/Yale_HER2_cohort/SVS/Her2Pos_Case_57.svs
+2025-11-02 04:55:09,378 - INFO - Mask shape: (2017, 2261)
+2025-11-02 04:55:09,378 - INFO - Loaded WSI backend: cucim
+2025-11-02 04:55:09,421 - INFO - Skipping data/Yale_HER2_cohort/SVS/Her2Pos_Case_57.svs; found 90 existing patches in outputs/patches/Her2Pos_Case_57
+2025-11-02 04:55:09,512 - INFO - Processing slide: data/Yale_HER2_cohort/SVS/Her2Pos_Case_58.svs
+2025-11-02 04:55:09,535 - INFO - Mask shape: (4335, 3927)
+2025-11-02 04:55:09,536 - INFO - Loaded WSI backend: cucim
+2025-11-02 04:55:09,554 - INFO - Skipping data/Yale_HER2_cohort/SVS/Her2Pos_Case_58.svs; found 17 existing patches in outputs/patches/Her2Pos_Case_58
+2025-11-02 04:55:09,648 - INFO - Processing slide: data/Yale_HER2_cohort/SVS/Her2Pos_Case_59.svs
+2025-11-02 04:55:09,669 - INFO - Mask shape: (2407, 3213)
+2025-11-02 04:55:09,669 - INFO - Loaded WSI backend: cucim
+2025-11-02 04:55:09,697 - INFO - Skipping data/Yale_HER2_cohort/SVS/Her2Pos_Case_59.svs; found 84 existing patches in outputs/patches/Her2Pos_Case_59
+2025-11-02 04:55:09,795 - INFO - Processing slide: data/Yale_HER2_cohort/SVS/Her2Pos_Case_60.svs
+2025-11-02 04:55:09,816 - INFO - Mask shape: (3125, 2499)
+2025-11-02 04:55:09,816 - INFO - Loaded WSI backend: cucim
+2025-11-02 04:55:09,851 - INFO - Skipping data/Yale_HER2_cohort/SVS/Her2Pos_Case_60.svs; found 78 existing patches in outputs/patches/Her2Pos_Case_60
+2025-11-02 04:55:09,945 - INFO - Processing slide: data/Yale_HER2_cohort/SVS/Her2Pos_Case_61.svs
+2025-11-02 04:55:09,981 - INFO - Mask shape: (3750, 3570)
+2025-11-02 04:55:09,986 - INFO - Loaded WSI backend: cucim
+2025-11-02 04:55:10,079 - INFO - Skipping data/Yale_HER2_cohort/SVS/Her2Pos_Case_61.svs; found 245 existing patches in outputs/patches/Her2Pos_Case_61
+2025-11-02 04:55:10,175 - INFO - Processing slide: data/Yale_HER2_cohort/SVS/Her2Pos_Case_62.svs
+2025-11-02 04:55:10,198 - INFO - Mask shape: (1905, 3570)
+2025-11-02 04:55:10,198 - INFO - Loaded WSI backend: cucim
+2025-11-02 04:55:10,234 - INFO - Skipping data/Yale_HER2_cohort/SVS/Her2Pos_Case_62.svs; found 95 existing patches in outputs/patches/Her2Pos_Case_62
+2025-11-02 04:55:10,330 - INFO - Processing slide: data/Yale_HER2_cohort/SVS/Her2Pos_Case_63.svs
+2025-11-02 04:55:10,365 - INFO - Mask shape: (3617, 5355)
+2025-11-02 04:55:10,365 - INFO - Loaded WSI backend: cucim
+2025-11-02 04:55:10,455 - INFO - Skipping data/Yale_HER2_cohort/SVS/Her2Pos_Case_63.svs; found 283 existing patches in outputs/patches/Her2Pos_Case_63
+2025-11-02 04:55:10,549 - INFO - Processing slide: data/Yale_HER2_cohort/SVS/Her2Pos_Case_64.svs
+2025-11-02 04:55:10,578 - INFO - Mask shape: (1853, 1785)
+2025-11-02 04:55:10,578 - INFO - Loaded WSI backend: cucim
+2025-11-02 04:55:10,615 - INFO - Skipping data/Yale_HER2_cohort/SVS/Her2Pos_Case_64.svs; found 104 existing patches in outputs/patches/Her2Pos_Case_64
+2025-11-02 04:55:10,710 - INFO - Processing slide: data/Yale_HER2_cohort/SVS/Her2Pos_Case_65.svs
+2025-11-02 04:55:10,732 - INFO - Mask shape: (2376, 2499)
+2025-11-02 04:55:10,732 - INFO - Loaded WSI backend: cucim
+2025-11-02 04:55:10,817 - INFO - Skipping data/Yale_HER2_cohort/SVS/Her2Pos_Case_65.svs; found 237 existing patches in outputs/patches/Her2Pos_Case_65
+2025-11-02 04:55:10,912 - INFO - Processing slide: data/Yale_HER2_cohort/SVS/Her2Pos_Case_66.svs
+2025-11-02 04:55:10,950 - INFO - Mask shape: (2991, 4046)
+2025-11-02 04:55:10,950 - INFO - Loaded WSI backend: cucim
+2025-11-02 04:55:11,055 - INFO - Skipping data/Yale_HER2_cohort/SVS/Her2Pos_Case_66.svs; found 252 existing patches in outputs/patches/Her2Pos_Case_66
+2025-11-02 04:55:11,160 - INFO - Processing slide: data/Yale_HER2_cohort/SVS/Her2Pos_Case_67.svs
+2025-11-02 04:55:11,173 - INFO - Mask shape: (2335, 2142)
+2025-11-02 04:55:11,173 - INFO - Loaded WSI backend: cucim
+2025-11-02 04:55:11,187 - INFO - Skipping data/Yale_HER2_cohort/SVS/Her2Pos_Case_67.svs; found 15 existing patches in outputs/patches/Her2Pos_Case_67
+2025-11-02 04:55:11,287 - INFO - Processing slide: data/Yale_HER2_cohort/SVS/Her2Pos_Case_68.svs
+2025-11-02 04:55:11,317 - INFO - Mask shape: (4396, 3094)
+2025-11-02 04:55:11,318 - INFO - Loaded WSI backend: cucim
+2025-11-02 04:55:11,358 - INFO - Skipping data/Yale_HER2_cohort/SVS/Her2Pos_Case_68.svs; found 91 existing patches in outputs/patches/Her2Pos_Case_68
+2025-11-02 04:55:11,456 - INFO - Processing slide: data/Yale_HER2_cohort/SVS/Her2Pos_Case_69.svs
+2025-11-02 04:55:11,495 - INFO - Mask shape: (3771, 3808)
+2025-11-02 04:55:11,496 - INFO - Loaded WSI backend: cucim
+2025-11-02 04:55:11,615 - INFO - Skipping data/Yale_HER2_cohort/SVS/Her2Pos_Case_69.svs; found 267 existing patches in outputs/patches/Her2Pos_Case_69
+2025-11-02 04:55:11,714 - INFO - Processing slide: data/Yale_HER2_cohort/SVS/Her2Pos_Case_70.svs
+2025-11-02 04:55:11,735 - INFO - Mask shape: (3565, 2023)
+2025-11-02 04:55:11,735 - INFO - Loaded WSI backend: cucim
+2025-11-02 04:55:11,785 - INFO - Skipping data/Yale_HER2_cohort/SVS/Her2Pos_Case_70.svs; found 100 existing patches in outputs/patches/Her2Pos_Case_70
+2025-11-02 04:55:11,881 - INFO - Processing slide: data/Yale_HER2_cohort/SVS/Her2Pos_Case_71.svs
+2025-11-02 04:55:11,926 - INFO - Mask shape: (2099, 3094)
+2025-11-02 04:55:11,927 - INFO - Loaded WSI backend: cucim
+2025-11-02 04:55:11,972 - INFO - Skipping data/Yale_HER2_cohort/SVS/Her2Pos_Case_71.svs; found 117 existing patches in outputs/patches/Her2Pos_Case_71
+2025-11-02 04:55:12,065 - INFO - Processing slide: data/Yale_HER2_cohort/SVS/Her2Pos_Case_72.svs
+2025-11-02 04:55:12,085 - INFO - Mask shape: (2561, 3332)
+2025-11-02 04:55:12,086 - INFO - Loaded WSI backend: cucim
+2025-11-02 04:55:12,157 - INFO - Skipping data/Yale_HER2_cohort/SVS/Her2Pos_Case_72.svs; found 267 existing patches in outputs/patches/Her2Pos_Case_72
+2025-11-02 04:55:12,254 - INFO - Processing slide: data/Yale_HER2_cohort/SVS/Her2Pos_Case_73.svs
+2025-11-02 04:55:12,301 - INFO - Mask shape: (6365, 15232)
+2025-11-02 04:55:12,301 - INFO - Loaded WSI backend: cucim
+2025-11-02 04:55:12,334 - INFO - Skipping data/Yale_HER2_cohort/SVS/Her2Pos_Case_73.svs; found 61 existing patches in outputs/patches/Her2Pos_Case_73
+2025-11-02 04:55:12,433 - INFO - Processing slide: data/Yale_HER2_cohort/SVS/Her2Pos_Case_74.svs
+2025-11-02 04:55:12,467 - INFO - Mask shape: (2704, 3808)
+2025-11-02 04:55:12,468 - INFO - Loaded WSI backend: cucim
+2025-11-02 04:55:12,494 - INFO - Skipping data/Yale_HER2_cohort/SVS/Her2Pos_Case_74.svs; found 87 existing patches in outputs/patches/Her2Pos_Case_74
+2025-11-02 04:55:12,596 - INFO - Processing slide: data/Yale_HER2_cohort/SVS/Her2Pos_Case_75.svs
+2025-11-02 04:55:12,618 - INFO - Mask shape: (2048, 3094)
+2025-11-02 04:55:12,621 - INFO - Loaded WSI backend: cucim
+2025-11-02 04:55:12,717 - INFO - Skipping data/Yale_HER2_cohort/SVS/Her2Pos_Case_75.svs; found 192 existing patches in outputs/patches/Her2Pos_Case_75
+2025-11-02 04:55:12,823 - INFO - Processing slide: data/Yale_HER2_cohort/SVS/Her2Pos_Case_76.svs
+2025-11-02 04:55:12,845 - INFO - Mask shape: (3955, 3689)
+2025-11-02 04:55:12,845 - INFO - Loaded WSI backend: cucim
+2025-11-02 04:55:12,902 - INFO - Skipping data/Yale_HER2_cohort/SVS/Her2Pos_Case_76.svs; found 141 existing patches in outputs/patches/Her2Pos_Case_76
+2025-11-02 04:55:13,000 - INFO - Processing slide: data/Yale_HER2_cohort/SVS/Her2Pos_Case_77.svs
+2025-11-02 04:55:13,031 - INFO - Mask shape: (3678, 4998)
+2025-11-02 04:55:13,031 - INFO - Loaded WSI backend: cucim
+2025-11-02 04:55:13,094 - INFO - Skipping data/Yale_HER2_cohort/SVS/Her2Pos_Case_77.svs; found 173 existing patches in outputs/patches/Her2Pos_Case_77
+2025-11-02 04:55:13,188 - INFO - Processing slide: data/Yale_HER2_cohort/SVS/Her2Pos_Case_78.svs
+2025-11-02 04:55:13,216 - INFO - Mask shape: (3094, 3094)
+2025-11-02 04:55:13,217 - INFO - Loaded WSI backend: cucim
+2025-11-02 04:55:13,279 - INFO - Skipping data/Yale_HER2_cohort/SVS/Her2Pos_Case_78.svs; found 189 existing patches in outputs/patches/Her2Pos_Case_78
+2025-11-02 04:55:13,375 - INFO - Processing slide: data/Yale_HER2_cohort/SVS/Her2Pos_Case_79.svs
+2025-11-02 04:55:13,401 - INFO - Mask shape: (2991, 2618)
+2025-11-02 04:55:13,401 - INFO - Loaded WSI backend: cucim
+2025-11-02 04:55:13,471 - INFO - Skipping data/Yale_HER2_cohort/SVS/Her2Pos_Case_79.svs; found 208 existing patches in outputs/patches/Her2Pos_Case_79
+2025-11-02 04:55:13,560 - INFO - Processing slide: data/Yale_HER2_cohort/SVS/Her2Pos_Case_80.svs
+2025-11-02 04:55:13,596 - INFO - Mask shape: (3371, 3689)
+2025-11-02 04:55:13,596 - INFO - Loaded WSI backend: cucim
+2025-11-02 04:55:13,613 - INFO - Skipping data/Yale_HER2_cohort/SVS/Her2Pos_Case_80.svs; found 37 existing patches in outputs/patches/Her2Pos_Case_80
+2025-11-02 04:55:13,701 - INFO - Processing slide: data/Yale_HER2_cohort/SVS/Her2Pos_Case_81.svs
+2025-11-02 04:55:13,743 - INFO - Mask shape: (4509, 4998)
+2025-11-02 04:55:13,743 - INFO - Loaded WSI backend: cucim
+2025-11-02 04:55:13,829 - INFO - Skipping data/Yale_HER2_cohort/SVS/Her2Pos_Case_81.svs; found 273 existing patches in outputs/patches/Her2Pos_Case_81
+2025-11-02 04:55:13,929 - INFO - Processing slide: data/Yale_HER2_cohort/SVS/Her2Pos_Case_82.svs
+2025-11-02 04:55:13,959 - INFO - Mask shape: (2417, 4760)
+2025-11-02 04:55:13,961 - INFO - Loaded WSI backend: cucim
+2025-11-02 04:55:14,096 - INFO - Skipping data/Yale_HER2_cohort/SVS/Her2Pos_Case_82.svs; found 322 existing patches in outputs/patches/Her2Pos_Case_82
+2025-11-02 04:55:14,189 - INFO - Processing slide: data/Yale_HER2_cohort/SVS/Her2Pos_Case_83.svs
+2025-11-02 04:55:14,215 - INFO - Mask shape: (1146, 2618)
+2025-11-02 04:55:14,215 - INFO - Loaded WSI backend: cucim
+2025-11-02 04:55:14,256 - INFO - Skipping data/Yale_HER2_cohort/SVS/Her2Pos_Case_83.svs; found 36 existing patches in outputs/patches/Her2Pos_Case_83
+2025-11-02 04:55:14,346 - INFO - Processing slide: data/Yale_HER2_cohort/SVS/Her2Pos_Case_84.svs
+2025-11-02 04:55:14,382 - INFO - Mask shape: (3381, 4760)
+2025-11-02 04:55:14,382 - INFO - Loaded WSI backend: cucim
+2025-11-02 04:55:14,440 - INFO - Skipping data/Yale_HER2_cohort/SVS/Her2Pos_Case_84.svs; found 130 existing patches in outputs/patches/Her2Pos_Case_84
+2025-11-02 04:55:14,536 - INFO - Processing slide: data/Yale_HER2_cohort/SVS/Her2Pos_Case_85.svs
+2025-11-02 04:55:14,559 - INFO - Mask shape: (3299, 4284)
+2025-11-02 04:55:14,559 - INFO - Loaded WSI backend: cucim
+2025-11-02 04:55:14,670 - INFO - Skipping data/Yale_HER2_cohort/SVS/Her2Pos_Case_85.svs; found 302 existing patches in outputs/patches/Her2Pos_Case_85
+2025-11-02 04:55:14,769 - INFO - Processing slide: data/Yale_HER2_cohort/SVS/Her2Pos_Case_86.svs
+2025-11-02 04:55:14,790 - INFO - Mask shape: (4355, 5117)
+2025-11-02 04:55:14,791 - INFO - Loaded WSI backend: cucim
+2025-11-02 04:55:14,833 - INFO - Skipping data/Yale_HER2_cohort/SVS/Her2Pos_Case_86.svs; found 102 existing patches in outputs/patches/Her2Pos_Case_86
+2025-11-02 04:55:14,917 - INFO - Processing slide: data/Yale_HER2_cohort/SVS/Her2Pos_Case_87.svs
+2025-11-02 04:55:14,944 - INFO - Mask shape: (1628, 1666)
+2025-11-02 04:55:14,944 - INFO - Loaded WSI backend: cucim
+2025-11-02 04:55:14,985 - INFO - Skipping data/Yale_HER2_cohort/SVS/Her2Pos_Case_87.svs; found 104 existing patches in outputs/patches/Her2Pos_Case_87
+2025-11-02 04:55:15,069 - INFO - Processing slide: data/Yale_HER2_cohort/SVS/Her2Pos_Case_88.svs
+2025-11-02 04:55:15,137 - INFO - Mask shape: (4355, 7140)
+2025-11-02 04:55:15,137 - INFO - Loaded WSI backend: cucim
+2025-11-02 04:55:15,178 - INFO - Skipping data/Yale_HER2_cohort/SVS/Her2Pos_Case_88.svs; found 142 existing patches in outputs/patches/Her2Pos_Case_88
+2025-11-02 04:55:15,273 - INFO - Processing slide: data/Yale_HER2_cohort/SVS/Her2Pos_Case_89.svs
+2025-11-02 04:55:15,314 - INFO - Mask shape: (2991, 4046)
+2025-11-02 04:55:15,315 - INFO - Loaded WSI backend: cucim
+2025-11-02 04:55:15,464 - INFO - Skipping data/Yale_HER2_cohort/SVS/Her2Pos_Case_89.svs; found 536 existing patches in outputs/patches/Her2Pos_Case_89
+2025-11-02 04:55:15,550 - INFO - Processing slide: data/Yale_HER2_cohort/SVS/Her2Pos_Case_90.svs
+2025-11-02 04:55:15,579 - INFO - Mask shape: (2376, 3927)
+2025-11-02 04:55:15,580 - INFO - Loaded WSI backend: cucim
+2025-11-02 04:55:15,726 - INFO - Skipping data/Yale_HER2_cohort/SVS/Her2Pos_Case_90.svs; found 457 existing patches in outputs/patches/Her2Pos_Case_90
+2025-11-02 04:55:15,816 - INFO - Processing slide: data/Yale_HER2_cohort/SVS/Her2Pos_Case_91.svs
+2025-11-02 04:55:15,834 - INFO - Mask shape: (2038, 2499)
+2025-11-02 04:55:15,834 - INFO - Loaded WSI backend: cucim
+2025-11-02 04:55:15,903 - INFO - Skipping data/Yale_HER2_cohort/SVS/Her2Pos_Case_91.svs; found 129 existing patches in outputs/patches/Her2Pos_Case_91
+2025-11-02 04:55:15,996 - INFO - Processing slide: data/Yale_HER2_cohort/SVS/Her2Pos_Case_92.svs
+2025-11-02 04:55:16,012 - INFO - Mask shape: (2602, 2261)
+2025-11-02 04:55:16,012 - INFO - Loaded WSI backend: cucim
+2025-11-02 04:55:16,038 - INFO - Skipping data/Yale_HER2_cohort/SVS/Her2Pos_Case_92.svs; found 67 existing patches in outputs/patches/Her2Pos_Case_92
+2025-11-02 04:55:16,119 - INFO - Processing slide: data/Yale_HER2_cohort/SVS/Her2Pos_Case_93.svs
+2025-11-02 04:55:16,148 - INFO - Mask shape: (4191, 3570)
+2025-11-02 04:55:16,149 - INFO - Loaded WSI backend: cucim
+2025-11-02 04:55:16,225 - INFO - Skipping data/Yale_HER2_cohort/SVS/Her2Pos_Case_93.svs; found 118 existing patches in outputs/patches/Her2Pos_Case_93
+2025-11-02 04:55:16,312 - INFO - Processing slide: data/Yale_HER2_cohort/SVS/Her2Pos_Case_94.svs
+2025-11-02 04:55:16,352 - INFO - Mask shape: (2561, 3094)
+2025-11-02 04:55:16,353 - INFO - Loaded WSI backend: cucim
+2025-11-02 04:55:16,438 - INFO - Skipping data/Yale_HER2_cohort/SVS/Her2Pos_Case_94.svs; found 258 existing patches in outputs/patches/Her2Pos_Case_94
+2025-11-02 04:55:16,527 - INFO - Processing slide: data/Yale_trastuzumab_response_cohort/SVS/O09-03495.svs
+2025-11-02 04:55:16,573 - INFO - Mask shape: (3832, 6902)
+2025-11-02 04:55:16,574 - INFO - Loaded WSI backend: cucim
+2025-11-02 04:55:16,644 - INFO - Skipping data/Yale_trastuzumab_response_cohort/SVS/O09-03495.svs; found 255 existing patches in outputs/patches/O09-03495
+2025-11-02 04:55:16,730 - INFO - Processing slide: data/Yale_trastuzumab_response_cohort/SVS/O10-12717.svs
+2025-11-02 04:55:16,777 - INFO - Mask shape: (4160, 4641)
+2025-11-02 04:55:16,780 - INFO - Loaded WSI backend: cucim
+2025-11-02 04:55:16,870 - INFO - Skipping data/Yale_trastuzumab_response_cohort/SVS/O10-12717.svs; found 274 existing patches in outputs/patches/O10-12717
+2025-11-02 04:55:16,958 - INFO - Processing slide: data/Yale_trastuzumab_response_cohort/SVS/O14-02301.svs
+2025-11-02 04:55:16,994 - INFO - Mask shape: (2458, 3451)
+2025-11-02 04:55:16,994 - INFO - Loaded WSI backend: cucim
+2025-11-02 04:55:17,013 - INFO - Skipping data/Yale_trastuzumab_response_cohort/SVS/O14-02301.svs; found 45 existing patches in outputs/patches/O14-02301
+2025-11-02 04:55:17,101 - INFO - Processing slide: data/Yale_trastuzumab_response_cohort/SVS/O16-11870.svs
+2025-11-02 04:55:17,160 - INFO - Mask shape: (3494, 3213)
+2025-11-02 04:55:17,160 - INFO - Loaded WSI backend: cucim
+2025-11-02 04:55:17,306 - INFO - Skipping data/Yale_trastuzumab_response_cohort/SVS/O16-11870.svs; found 467 existing patches in outputs/patches/O16-11870
+2025-11-02 04:55:17,396 - INFO - Processing slide: data/Yale_trastuzumab_response_cohort/SVS/O16-18464.svs
+2025-11-02 04:55:17,413 - INFO - Mask shape: (3525, 3927)
+2025-11-02 04:55:17,413 - INFO - Loaded WSI backend: cucim
+2025-11-02 04:55:17,509 - INFO - Skipping data/Yale_trastuzumab_response_cohort/SVS/O16-18464.svs; found 175 existing patches in outputs/patches/O16-18464
+2025-11-02 04:55:17,597 - INFO - Processing slide: data/Yale_trastuzumab_response_cohort/SVS/O17-01529.svs
+2025-11-02 04:55:17,636 - INFO - Mask shape: (4037, 4046)
+2025-11-02 04:55:17,641 - INFO - Loaded WSI backend: cucim
+2025-11-02 04:55:17,733 - INFO - Skipping data/Yale_trastuzumab_response_cohort/SVS/O17-01529.svs; found 296 existing patches in outputs/patches/O17-01529
+2025-11-02 04:55:17,826 - INFO - Processing slide: data/Yale_trastuzumab_response_cohort/SVS/O18-12772.svs
+2025-11-02 04:55:17,847 - INFO - Mask shape: (2786, 3094)
+2025-11-02 04:55:17,848 - INFO - Loaded WSI backend: cucim
+2025-11-02 04:55:17,941 - INFO - Skipping data/Yale_trastuzumab_response_cohort/SVS/O18-12772.svs; found 348 existing patches in outputs/patches/O18-12772
+2025-11-02 04:55:18,029 - INFO - Processing slide: data/Yale_trastuzumab_response_cohort/SVS/S08-31466.svs
+2025-11-02 04:55:18,055 - INFO - Mask shape: (1617, 2380)
+2025-11-02 04:55:18,055 - INFO - Loaded WSI backend: cucim
+2025-11-02 04:55:18,105 - INFO - Skipping data/Yale_trastuzumab_response_cohort/SVS/S08-31466.svs; found 176 existing patches in outputs/patches/S08-31466
+2025-11-02 04:55:18,223 - INFO - ================================================================================
+2025-11-02 04:55:18,225 - INFO - Starting train/val CSV generation
+2025-11-02 04:55:18,225 - INFO - ================================================================================
+2025-11-02 04:55:18,236 - INFO - Loaded TCGA labels from: data/TCGA_BRCA_Filtered/case&annotation_counts_clean.xlsx
+2025-11-02 04:55:18,236 - INFO - TCGA cases in Excel: 182
+2025-11-02 04:55:18,240 - INFO - TCGA positive cases: 92
+2025-11-02 04:55:18,241 - INFO - TCGA negative cases: 90
+2025-11-02 04:55:18,245 - INFO - Collecting patches from all cases...
+2025-11-02 04:55:18,354 - INFO - Found 375 case directories
+2025-11-02 04:58:34,049 - INFO - Total patches collected: 629567
+2025-11-02 04:58:34,266 - INFO - Label distribution - Negative: 342205, Positive: 287362
+2025-11-02 04:58:34,313 - INFO - Number of cases - Negative: 154, Positive: 221
+2025-11-02 04:58:34,313 - INFO - Performing train/val split by case...
+2025-11-02 04:58:42,532 - INFO - Train patches: 470418, Val patches: 159149
+2025-11-02 04:58:42,535 - INFO - Train cases: 300, Val cases: 75
+2025-11-02 04:58:42,539 - INFO - Train split - Negative: 241301, Positive: 229117
+2025-11-02 04:58:42,539 - INFO - Val split - Negative: 100904, Positive: 58245
+2025-11-02 04:59:27,258 - INFO - Saved train CSV to: outputs/patches_index_train.csv
+2025-11-02 04:59:27,258 - INFO - Saved val CSV to: outputs/patches_index_val.csv
+2025-11-02 04:59:27,258 - INFO - Train/val CSV generation completed successfully
+2025-11-02 04:59:27,258 - INFO - ================================================================================
+2025-11-02 04:59:27,301 - INFO - ================================================================================
+2025-11-02 04:59:27,302 - INFO - Starting Phase 1 training (ResNet-50)
+2025-11-02 04:59:27,302 - INFO - Configuration: {'train_csv': 'outputs/patches_index_train.csv', 'val_csv': 'outputs/patches_index_val.csv', 'output_dir': 'outputs/phase1', 'pretrained': True, 'input_size': 224, 'batch_size': 8, 'accumulation_steps': 4, 'use_amp': True, 'num_workers': 2, 'epochs': 10, 'lr': 0.0001, 'weight_decay': 0.0001, 'label_col': 'label', 'path_col': 'path', 'save_best_by': 'auc', 'seed': 42}
+2025-11-02 04:59:27,302 - INFO - Memory optimizations enabled:
+2025-11-02 04:59:27,302 - INFO -   - Input size: 224x224
+2025-11-02 04:59:27,302 - INFO -   - Batch size: 8 with 4 accumulation steps
+2025-11-02 04:59:27,302 - INFO -   - Effective batch size: 32
+2025-11-02 04:59:27,302 - INFO -   - Mixed precision (FP16): True
+2025-11-02 04:59:27,303 - INFO - ================================================================================
