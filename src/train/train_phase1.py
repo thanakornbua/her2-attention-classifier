@@ -46,6 +46,7 @@ from torch.cuda.amp import autocast, GradScaler
 import torchvision.transforms as T
 import torchvision.models as models
 import gc
+from tqdm import tqdm
 
 from sklearn.metrics import roc_auc_score, accuracy_score, confusion_matrix, classification_report
 
@@ -153,7 +154,7 @@ def build_optimizer(model, lr=1e-4, weight_decay=1e-4):
     return optim.AdamW(model.parameters(), lr=lr, weight_decay=weight_decay)
 
 
-def train_one_epoch(model, loader, criterion, optimizer, device, accumulation_steps=1, use_amp=True):
+def train_one_epoch(model, loader, criterion, optimizer, device, accumulation_steps=1, use_amp=True, epoch=None, log_wandb=False, global_step=None):
     model.train()
     running_loss = 0.0
     all_targets, all_probs = [], []
@@ -162,7 +163,15 @@ def train_one_epoch(model, loader, criterion, optimizer, device, accumulation_st
     # Mixed precision scaler
     scaler = GradScaler() if use_amp else None
     
-    for batch_idx, (imgs, labels, _) in enumerate(loader):
+    # Progress bar
+    desc = f"Epoch {epoch} [Train]" if epoch is not None else "Training"
+    pbar = tqdm(enumerate(loader), total=len(loader), desc=desc, leave=False)
+    
+    # Initialize global step if not provided
+    if global_step is None:
+        global_step = 0
+    
+    for batch_idx, (imgs, labels, _) in pbar:
         imgs = imgs.to(device, non_blocking=True)
         labels = labels.to(device, non_blocking=True)
         
@@ -205,12 +214,29 @@ def train_one_epoch(model, loader, criterion, optimizer, device, accumulation_st
         all_probs.extend(probs.tolist())
         all_targets.extend(labels.cpu().numpy().tolist())
         
+        # Update progress bar with current loss
+        current_loss = running_loss / ((batch_idx + 1) * imgs.size(0))
+        pbar.set_postfix({'loss': f'{current_loss:.4f}'})
+        
+        # Log batch metrics to wandb every N steps
+        if log_wandb and batch_idx % 10 == 0:
+            try:
+                import wandb
+                wandb.log({
+                    'batch/train_loss': current_loss,
+                    'batch/step': global_step + batch_idx,
+                }, step=global_step + batch_idx)
+            except:
+                pass
+        
         # Free GPU memory explicitly
         del imgs, labels, logits, loss, probs
         
         # More aggressive memory cleanup for small GPUs
         if batch_idx % 10 == 0:
             torch.cuda.empty_cache()
+    
+    pbar.close()
     
     # Handle remaining gradients if batches don't divide evenly
     if len(loader) % accumulation_steps != 0:
@@ -228,15 +254,22 @@ def train_one_epoch(model, loader, criterion, optimizer, device, accumulation_st
         epoch_auc = float('nan')
     preds = (np.array(all_probs) >= 0.5).astype(int)
     epoch_acc = accuracy_score(all_targets, preds)
-    return {'loss': epoch_loss, 'auc': epoch_auc, 'acc': epoch_acc}
+    
+    # Return global step for next epoch
+    return {'loss': epoch_loss, 'auc': epoch_auc, 'acc': epoch_acc, 'global_step': global_step + len(loader)}
 
 
-def evaluate(model, loader, criterion, device, use_amp=True):
+def evaluate(model, loader, criterion, device, use_amp=True, epoch=None):
     model.eval()
     running_loss = 0.0
     all_targets, all_probs = [], []
+    
+    # Progress bar
+    desc = f"Epoch {epoch} [Val]" if epoch is not None else "Evaluating"
+    pbar = tqdm(enumerate(loader), total=len(loader), desc=desc, leave=False)
+    
     with torch.no_grad():
-        for batch_idx, (imgs, labels, _) in enumerate(loader):
+        for batch_idx, (imgs, labels, _) in pbar:
             imgs = imgs.to(device, non_blocking=True)
             labels = labels.to(device, non_blocking=True)
             
@@ -258,11 +291,19 @@ def evaluate(model, loader, criterion, device, use_amp=True):
             
             all_probs.extend(probs.tolist())
             all_targets.extend(labels.cpu().numpy().tolist())
+            
+            # Update progress bar with current loss
+            current_loss = running_loss / ((batch_idx + 1) * imgs.size(0))
+            pbar.set_postfix({'loss': f'{current_loss:.4f}'})
+            
             # Free GPU memory explicitly
             del imgs, labels, logits, loss, probs
             # More aggressive memory cleanup for small GPUs
             if batch_idx % 10 == 0:
                 torch.cuda.empty_cache()
+    
+    pbar.close()
+    
     epoch_loss = running_loss / len(loader.dataset)
     try:
         epoch_auc = roc_auc_score(all_targets, all_probs)
@@ -342,20 +383,48 @@ def train_phase1(config: Dict[str, Any]):
     # Initialize TensorBoard writer
     writer = SummaryWriter(log_dir=str(tb_dir))
     
+    # Define checkpoint path and resume flag early
+    checkpoint_path = models_dir / 'checkpoint_last.pth'
+    resume_training = cfg.get('resume', True)
+    
     # Initialize Weights & Biases
     use_wandb = cfg.get('use_wandb', True) and WANDB_AVAILABLE
+    wandb_id = None
     if use_wandb:
         wandb_project = cfg.get('wandb_project', 'her2-classification')
         wandb_name = cfg.get('wandb_name', f"phase1_bs{cfg['batch_size']}_size{cfg['input_size']}")
-        wandb.init(
-            project=wandb_project,
-            name=wandb_name,
-            config=cfg,
-            dir=str(out_dir),
-            tags=['phase1', 'resnet50', 'her2-classifier']
-        )
-        # Log model architecture
-        print(f"Weights & Biases initialized: {wandb_project}/{wandb_name}")
+        
+        # Check if resuming and get wandb run ID from checkpoint
+        if resume_training and checkpoint_path.exists():
+            try:
+                checkpoint = torch.load(checkpoint_path, map_location='cpu')
+                wandb_id = checkpoint.get('wandb_id', None)
+                if wandb_id:
+                    print(f"Resuming wandb run: {wandb_id}")
+            except Exception:
+                pass
+        
+        try:
+            wandb.init(
+                project=wandb_project,
+                name=wandb_name,
+                config=cfg,
+                dir=str(out_dir),
+                tags=['phase1', 'resnet50', 'her2-classifier'],
+                id=wandb_id,
+                resume='allow' if wandb_id else None,
+                settings=wandb.Settings(
+                    code_dir=None,  # Disable code artifact logging
+                    _disable_stats=False,
+                    _disable_meta=False,
+                )
+            )
+            wandb_id = wandb.run.id
+            print(f"Weights & Biases initialized: {wandb_project}/{wandb_name}")
+        except Exception as e:
+            print(f"Warning: Failed to initialize Weights & Biases: {e}")
+            print("Continuing with TensorBoard logging only")
+            use_wandb = False
     else:
         if not WANDB_AVAILABLE:
             print("Weights & Biases not available - install with: pip install wandb")
@@ -390,6 +459,11 @@ def train_phase1(config: Dict[str, Any]):
     model = model.to(device)
     criterion = nn.CrossEntropyLoss()
     optimizer = build_optimizer(model, lr=float(cfg['lr']), weight_decay=float(cfg['weight_decay']))
+    
+    # Enable wandb model watching after model is created
+    if use_wandb:
+        wandb.watch(model, criterion, log='all', log_freq=100)
+        print(f"Model watching enabled - tracking gradients and parameters")
 
     best_key = cfg.get('save_best_by', 'auc')
     if best_key not in ('auc', 'acc'):
@@ -397,6 +471,31 @@ def train_phase1(config: Dict[str, Any]):
     best_score = -np.inf
     best_metrics = {}
     history = []
+    start_epoch = 0
+    
+    # Check for checkpoint to resume from
+    if resume_training and checkpoint_path.exists():
+        print(f"Found checkpoint at {checkpoint_path}, resuming training...")
+        try:
+            checkpoint = torch.load(checkpoint_path, map_location=device)
+            model.load_state_dict(checkpoint['model_state_dict'])
+            optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+            start_epoch = checkpoint['epoch'] + 1
+            best_score = checkpoint['best_score']
+            best_metrics = checkpoint.get('best_metrics', {})
+            history = checkpoint.get('history', [])
+            
+            print(f"Resumed from epoch {checkpoint['epoch']}")
+            print(f"Best {best_key} so far: {best_score:.4f}")
+        except Exception as e:
+            print(f"Warning: Failed to load checkpoint: {e}")
+            print("Starting training from scratch...")
+            start_epoch = 0
+    else:
+        if resume_training:
+            print("No checkpoint found, starting training from scratch...")
+        else:
+            print("Resume disabled, starting training from scratch...")
     
     # Get gradient accumulation steps
     accumulation_steps = int(cfg.get('accumulation_steps', 1))
@@ -409,11 +508,19 @@ def train_phase1(config: Dict[str, Any]):
 
     start_time = time.time()
     epochs = int(cfg['epochs'])
-    for epoch in range(epochs):
+    
+    # Track global training steps for batch-level logging
+    global_step = 0
+    
+    # Main training loop with overall progress bar
+    epoch_pbar = tqdm(range(start_epoch, epochs), desc="Training Progress", initial=start_epoch, total=epochs)
+    
+    for epoch in epoch_pbar:
         t0 = time.time()
-        train_log = train_one_epoch(model, train_loader, criterion, optimizer, device, accumulation_steps, use_amp)
-        val_log = evaluate(model, val_loader, criterion, device, use_amp)
-        history.append({'train': train_log, 'val': {k: val_log[k] for k in ['loss', 'auc', 'acc']}})
+        train_log = train_one_epoch(model, train_loader, criterion, optimizer, device, accumulation_steps, use_amp, epoch=epoch+1, log_wandb=use_wandb, global_step=global_step)
+        global_step = train_log.get('global_step', global_step)  # Update global step
+        val_log = evaluate(model, val_loader, criterion, device, use_amp, epoch=epoch+1)
+        history.append({'train': {k: v for k, v in train_log.items() if k != 'global_step'}, 'val': {k: val_log[k] for k in ['loss', 'auc', 'acc']}})
 
         # Log to TensorBoard
         writer.add_scalar('Loss/train', train_log['loss'], epoch)
@@ -427,13 +534,13 @@ def train_phase1(config: Dict[str, Any]):
         # Log to Weights & Biases
         if use_wandb:
             wandb_log = {
-                'epoch': epoch,
+                'epoch': epoch + 1,
                 'train/loss': train_log['loss'],
                 'train/auc': train_log['auc'],
-                'train/acc': train_log['acc'],
+                'train/accuracy': train_log['acc'],
                 'val/loss': val_log['loss'],
                 'val/auc': val_log['auc'],
-                'val/acc': val_log['acc'],
+                'val/accuracy': val_log['acc'],
                 'learning_rate': optimizer.param_groups[0]['lr'],
             }
             # Add GPU memory usage if available
@@ -441,7 +548,7 @@ def train_phase1(config: Dict[str, Any]):
                 wandb_log['gpu/memory_allocated_gb'] = torch.cuda.memory_allocated() / 1024**3
                 wandb_log['gpu/memory_reserved_gb'] = torch.cuda.memory_reserved() / 1024**3
                 wandb_log['gpu/max_memory_allocated_gb'] = torch.cuda.max_memory_allocated() / 1024**3
-            wandb.log(wandb_log, step=epoch)
+            wandb.log(wandb_log)
 
         cur_score = val_log.get(best_key, float('-inf'))
         improved = np.isfinite(cur_score) and cur_score > best_score
@@ -463,15 +570,45 @@ def train_phase1(config: Dict[str, Any]):
                 wandb.run.summary['best_val_loss'] = float(val_log['loss'])
         
         dur = time.time() - t0
-        print(
+        
+        # Update epoch progress bar with current metrics
+        epoch_pbar.set_postfix({
+            'train_auc': f'{train_log["auc"]:.4f}',
+            'val_auc': f'{val_log["auc"]:.4f}',
+            'best': '*' if improved else ''
+        })
+        
+        # Print detailed epoch summary
+        tqdm.write(
             f"Epoch {epoch+1}/{epochs} | "
             f"train: loss={train_log['loss']:.4f} auc={train_log['auc']:.4f} acc={train_log['acc']:.4f} | "
             f"val: loss={val_log['loss']:.4f} auc={val_log['auc']:.4f} acc={val_log['acc']:.4f} | "
             f"{'*' if improved else ''} ({dur:.1f}s)"
         )
+        
+        # Save checkpoint after each epoch
+        checkpoint = {
+            'epoch': epoch,
+            'model_state_dict': model.state_dict(),
+            'optimizer_state_dict': optimizer.state_dict(),
+            'best_score': best_score,
+            'best_metrics': best_metrics,
+            'history': history,
+            'config': cfg,
+            'wandb_id': wandb_id if use_wandb else None,
+        }
+        torch.save(checkpoint, models_dir / 'checkpoint_last.pth')
+        
+        # Save periodic checkpoints every 5 epochs
+        if (epoch + 1) % 5 == 0:
+            torch.save(checkpoint, models_dir / f'checkpoint_epoch_{epoch}.pth')
+            tqdm.write(f"Saved checkpoint at epoch {epoch}")
+        
         # Clean up after each epoch to prevent memory accumulation
         gc.collect()
         torch.cuda.empty_cache()
+    
+    epoch_pbar.close()
     
     # Close TensorBoard writer
     writer.close()
