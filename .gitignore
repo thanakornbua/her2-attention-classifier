@@ -10,11 +10,9 @@
 *.pyc
 *.xml
 *.svs
-*.csv
 *.txt
 *.sums
 *.xlsx
-*.png
 *.log
 data/
 __pycache__/
@@ -22,5 +20,6 @@ __pycache__/
 *.log
 outputs/preprocessing/logs/preprocessing.log
 outputs/phase1/models/model_phase1.pth
+outputs/patches
 *.tfevents.*
 *.wandb
