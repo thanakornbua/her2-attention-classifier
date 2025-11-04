@@ -16,6 +16,10 @@
 *.log
 data/
 __pycache__/
+/plots/
+/outputs/opt_gpu_analyse/
+/outputs/vanil_gpu_analyse/
+/outputs/opt_cpu_analyse/
 
 *.log
 outputs/preprocessing/logs/preprocessing.log
