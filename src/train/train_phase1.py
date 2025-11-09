@@ -297,9 +297,9 @@ def train_one_epoch(model, loader, criterion, optimizer, device, rank=0, accumul
         running_loss += loss.item() * batch_size * accumulation_steps
         sample_count += batch_size
         with torch.no_grad():
-            probs = torch.softmax(logits.float(), dim=1)[:, 1].cpu().numpy()
-        all_probs.extend(probs.tolist())
-        all_targets.extend(labels.cpu().numpy().tolist())
+            probs = torch.softmax(logits.float(), dim=1)[:, 1]
+        all_probs.extend(probs.cpu().tolist())
+        all_targets.extend(labels.cpu().tolist())
         
         # Progress bar update (calculate average loss correctly)
         if is_main_process(rank):
@@ -360,9 +360,9 @@ def evaluate(model, loader, criterion, device, rank=0, use_amp=True, epoch=None)
             batch_size = imgs.size(0)
             running_loss += loss.item() * batch_size
             sample_count += batch_size
-            probs = torch.softmax(logits.float(), dim=1)[:, 1].detach().cpu().numpy().tolist()
-            all_probs.extend(probs)
-            all_targets.extend(labels.detach().cpu().numpy().tolist())
+            probs = torch.softmax(logits.float(), dim=1)[:, 1]
+            all_probs.extend(probs.cpu().tolist())
+            all_targets.extend(labels.cpu().tolist())
             if is_main_process(rank):
                 avg_loss = running_loss / max(sample_count, 1)
                 pbar.set_postfix({'loss': f'{avg_loss:.4f}'})
@@ -561,14 +561,13 @@ def calculate_class_weights(train_csv, label_col):
     division by zero in extreme imbalance scenarios.
     """
     df = pd.read_csv(train_csv)
-    labels = df[label_col].astype(int).values
-    counts = {0: 0, 1: 0}
-    for k, v in pd.Series(labels).value_counts().items():
-        counts[int(k)] = int(v)
-    class_counts = np.array([counts[0], counts[1]], dtype=np.float32)
-    class_counts[class_counts == 0] = 1.0
+    labels = df[label_col].astype(int)
+    class_counts = np.array([
+        max((labels == 0).sum(), 1),
+        max((labels == 1).sum(), 1)
+    ], dtype=np.float32)
     total = class_counts.sum()
-    weights = total / (len(class_counts) * class_counts)
+    weights = total / (2 * class_counts)
     return torch.tensor(weights, dtype=torch.float32)
 
 
@@ -648,10 +647,19 @@ def train_phase1(config: Dict[str, Any]):
         else:
             print("Weights & Biases logging disabled")
 
+    # Extract commonly used config values once
+    input_size = int(cfg['input_size'])
+    batch_size = int(cfg['batch_size'])
+    num_workers = int(cfg['num_workers'])
+    epochs = int(cfg['epochs'])
+    lr = float(cfg['lr'])
+    weight_decay = float(cfg['weight_decay'])
+    seed = int(cfg.get('seed', 42))
+    
     # Datasets and loaders
     enable_stain_norm = bool(cfg.get('enable_stain_norm', True))
-    train_tfms = build_transforms(int(cfg['input_size']), train=True, enable_stain_norm=enable_stain_norm)
-    val_tfms = build_transforms(int(cfg['input_size']), train=False, enable_stain_norm=enable_stain_norm)
+    train_tfms = build_transforms(input_size, train=True, enable_stain_norm=enable_stain_norm)
+    val_tfms = build_transforms(input_size, train=False, enable_stain_norm=enable_stain_norm)
 
     train_set = PatchDataset(cfg['train_csv'], cfg['path_col'], cfg['label_col'], transform=train_tfms)
     val_set = PatchDataset(cfg['val_csv'], cfg['path_col'], cfg['label_col'], transform=val_tfms)
@@ -662,18 +670,16 @@ def train_phase1(config: Dict[str, Any]):
     
     pin_mem = torch.cuda.is_available()
     prefetch_factor = int(cfg.get('prefetch_factor', 2))
-    persistent_workers = bool(cfg.get('persistent_workers', True)) and int(cfg['num_workers']) > 0
+    persistent_workers = bool(cfg.get('persistent_workers', True)) and num_workers > 0
     def _worker_init_fn(worker_id):
-        base_seed = int(cfg.get('seed', 42))
-        seed = base_seed + worker_id
-        random.seed(seed)
-        np.random.seed(seed)
-        torch.manual_seed(seed)
+        worker_seed = seed + worker_id
+        random.seed(worker_seed)
+        np.random.seed(worker_seed)
+        torch.manual_seed(worker_seed)
 
     # Build DataLoader kwargs
-    num_workers = int(cfg['num_workers'])
     loader_kwargs = {
-        'batch_size': int(cfg['batch_size']),
+        'batch_size': batch_size,
         'num_workers': num_workers,
         'pin_memory': pin_mem,
         **(
@@ -719,10 +725,10 @@ def train_phase1(config: Dict[str, Any]):
             print(f"Using class weights for imbalanced dataset: {class_weights.tolist()}")
     
     criterion = build_criterion(loss_type=loss_type, class_weights=class_weights).to(device)
-    optimizer = build_optimizer(model, lr=float(cfg['lr']), weight_decay=float(cfg['weight_decay']))
+    optimizer = build_optimizer(model, lr=lr, weight_decay=weight_decay)
     
     # Cosine annealing LR scheduler for better convergence
-    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=int(cfg['epochs']), eta_min=1e-6)
+    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=epochs, eta_min=1e-6)
     
     if use_wandb:
         wandb.watch(model, criterion, log='all', log_freq=100)
@@ -776,12 +782,11 @@ def train_phase1(config: Dict[str, Any]):
     
     if is_main_process(rank):
         if accumulation_steps > 1:
-            print(f"Using gradient accumulation with {accumulation_steps} steps (effective batch size: {int(cfg['batch_size']) * accumulation_steps})")
+            print(f"Using gradient accumulation with {accumulation_steps} steps (effective batch size: {batch_size * accumulation_steps})")
         if use_amp:
             print("Using mixed precision training (FP16) for memory efficiency")
 
     start_time = time.time()
-    epochs = int(cfg['epochs'])
     global_step = 0
     # Persistent GradScaler across epochs for numerical stability
     scaler = GradScaler(enabled=use_amp)
