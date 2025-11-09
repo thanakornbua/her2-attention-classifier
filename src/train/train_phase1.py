@@ -196,31 +196,46 @@ class FocalLoss(nn.Module):
     
     Focuses on hard-to-classify examples, improves recall on minority class.
     Recommended for HER2 when positive cases are <30% of dataset.
+    
+    Args:
+        alpha: Weighting factor in [0,1] for class 1 (positive). Default 0.25.
+        gamma: Focusing parameter >= 0. gamma=0 is equivalent to CE. Default 2.0.
+        class_weights: Optional per-class weights tensor of shape [num_classes].
     """
-    def __init__(self, alpha=0.25, gamma=2.0):
+    def __init__(self, alpha=0.25, gamma=2.0, class_weights=None):
         super().__init__()
         self.alpha = alpha
         self.gamma = gamma
+        self.class_weights = class_weights
     
     def forward(self, inputs, targets):
-        ce_loss = nn.functional.cross_entropy(inputs, targets, reduction='none')
+        ce_loss = nn.functional.cross_entropy(inputs, targets, reduction='none', weight=self.class_weights)
         pt = torch.exp(-ce_loss)
         focal_loss = self.alpha * (1 - pt) ** self.gamma * ce_loss
         return focal_loss.mean()
 
 
 def build_criterion(loss_type: str = 'cross_entropy', class_weights=None):
-    """Build loss function.
+    """Build loss function with proper class weighting for medical data.
+    
     Args:
         loss_type: 'cross_entropy' or 'focal'
         class_weights: optional tensor/list of shape [num_classes]
+    
+    Returns:
+        Loss criterion (nn.Module)
+    
+    Note: Focal loss can also accept class_weights for combined effect.
     """
+    if class_weights is not None and not torch.is_tensor(class_weights):
+        class_weights = torch.tensor(class_weights, dtype=torch.float32)
+    
     if loss_type == 'focal':
-        return FocalLoss(alpha=0.25, gamma=2.0)
+        # Focal loss with optional class weighting
+        return FocalLoss(alpha=0.25, gamma=2.0, class_weights=class_weights)
+    
+    # Standard cross-entropy with optional class weighting
     if class_weights is not None:
-        # Keep provided weights as-is if tensor; else convert to tensor
-        if not torch.is_tensor(class_weights):
-            class_weights = torch.tensor(class_weights, dtype=torch.float32)
         return nn.CrossEntropyLoss(weight=class_weights)
     return nn.CrossEntropyLoss()
 
@@ -283,13 +298,15 @@ def train_one_epoch(model, loader, criterion, optimizer, device, rank=0, accumul
         all_probs.extend(probs.tolist())
         all_targets.extend(labels.cpu().numpy().tolist())
         
-        # Progress bar update
+        # Progress bar update (calculate average loss correctly)
         if is_main_process(rank):
-            pbar.set_postfix({'loss': f'{running_loss / ((batch_idx + 1) * imgs.size(0)):.4f}'})
+            avg_loss = running_loss / max(sample_count, 1)
+            pbar.set_postfix({'loss': f'{avg_loss:.4f}'})
         
         # Periodic wandb logging (main process only)
         if log_wandb and is_main_process(rank) and batch_idx % 10 == 0:
-            wandb.log({'batch/train_loss': running_loss / ((batch_idx + 1) * imgs.size(0)), 'batch/step': global_step + batch_idx}, step=global_step + batch_idx)
+            avg_loss = running_loss / max(sample_count, 1)
+            wandb.log({'batch/train_loss': avg_loss, 'batch/step': global_step + batch_idx}, step=global_step + batch_idx)
     
     pbar.close()
     
@@ -357,7 +374,8 @@ def evaluate(model, loader, criterion, device, rank=0, use_amp=True, epoch=None)
             all_probs.extend(probs)
             all_targets.extend(labels.detach().cpu().numpy().tolist())
             if is_main_process(rank):
-                pbar.set_postfix({'loss': f'{running_loss / ((batch_idx + 1) * imgs.size(0)):.4f}'})
+                avg_loss = running_loss / max(sample_count, 1)
+                pbar.set_postfix({'loss': f'{avg_loss:.4f}'})
     pbar.close()
     
     # Aggregate loss across DDP processes
@@ -383,32 +401,62 @@ def evaluate(model, loader, criterion, device, rank=0, use_amp=True, epoch=None)
     # Compute metrics (on rank 0 for reporting)
     # Compute optimal threshold (Youden's J)
     def _optimal_threshold(y_true, y_prob):
+        """Compute optimal threshold using Youden's J statistic.
+        
+        Maximizes (sensitivity + specificity - 1) for balanced classification.
+        Critical for medical applications where both false positives and 
+        false negatives have clinical consequences.
+        """
         try:
             from sklearn.metrics import roc_curve
             fpr, tpr, thr = roc_curve(y_true, y_prob)
-            j = tpr - fpr
-            return float(thr[np.argmax(j)])
-        except Exception:
+            j = tpr - fpr  # Youden's J = sensitivity + specificity - 1
+            idx = np.argmax(j)
+            return float(thr[idx])
+        except Exception as e:
+            # Fallback to 0.5 if computation fails (shouldn't happen with valid data)
             return 0.5
 
     opt_thr = _optimal_threshold(global_targets, global_probs)
+    # Compute metrics with proper error handling
     try:
         epoch_auc = roc_auc_score(global_targets, global_probs)
     except Exception:
         epoch_auc = float('nan')
+    
+    # Predictions at standard 0.5 threshold
     preds = (np.array(global_probs) >= 0.5).astype(int)
+    # Predictions at optimal threshold (Youden's J)
     preds_opt = (np.array(global_probs) >= opt_thr).astype(int)
-    epoch_acc = accuracy_score(global_targets, preds) if len(global_targets) == len(preds) and len(preds) > 0 else float('nan')
-    acc_opt = accuracy_score(global_targets, preds_opt) if len(global_targets) == len(preds_opt) and len(preds_opt) > 0 else float('nan')
-    cm = confusion_matrix(global_targets, preds) if np.isfinite(epoch_acc) else np.array([[0, 0], [0, 0]])
-    cm_opt = confusion_matrix(global_targets, preds_opt) if np.isfinite(acc_opt) else np.array([[0, 0], [0, 0]])
-    cls_report = classification_report(global_targets, preds, target_names=['HER2-', 'HER2+'], output_dict=True) if np.isfinite(epoch_acc) else {}
-    cls_report_opt = classification_report(global_targets, preds_opt, target_names=['HER2-', 'HER2+'], output_dict=True) if np.isfinite(acc_opt) else {}
+    
+    # Compute metrics for both thresholds
+    valid_data = len(global_targets) == len(preds) and len(preds) > 0
+    epoch_acc = accuracy_score(global_targets, preds) if valid_data else float('nan')
+    acc_opt = accuracy_score(global_targets, preds_opt) if valid_data else float('nan')
+    
+    # Confusion matrices (for sensitivity/specificity calculation)
+    cm = confusion_matrix(global_targets, preds, labels=[0, 1]) if np.isfinite(epoch_acc) else np.array([[0, 0], [0, 0]])
+    cm_opt = confusion_matrix(global_targets, preds_opt, labels=[0, 1]) if np.isfinite(acc_opt) else np.array([[0, 0], [0, 0]])
+    
+    # Detailed classification reports
+    cls_report = classification_report(global_targets, preds, target_names=['HER2-', 'HER2+'], output_dict=True, zero_division=0) if np.isfinite(epoch_acc) else {}
+    cls_report_opt = classification_report(global_targets, preds_opt, target_names=['HER2-', 'HER2+'], output_dict=True, zero_division=0) if np.isfinite(acc_opt) else {}
+    
+    # Medical-grade metrics: Sensitivity and Specificity
+    # For HER2: Sensitivity (recall) = TP/(TP+FN), Specificity = TN/(TN+FP)
+    sensitivity = float('nan')
+    specificity = float('nan')
+    if cm.sum() > 0 and np.isfinite(epoch_acc):
+        tn, fp, fn, tp = cm.ravel()
+        sensitivity = tp / (tp + fn) if (tp + fn) > 0 else 0.0
+        specificity = tn / (tn + fp) if (tn + fp) > 0 else 0.0
     
     return {
         'loss': epoch_loss,
         'auc': epoch_auc,
         'acc': epoch_acc,
+        'sensitivity': sensitivity,  # True positive rate (recall for HER2+)
+        'specificity': specificity,  # True negative rate
         'cm': cm,
         'cm_opt': cm_opt,
         'report': cls_report,
@@ -683,6 +731,7 @@ def train_phase1(config: Dict[str, Any]):
     
     # Broadcast start_epoch to all processes in DDP
     if use_ddp:
+        torch.distributed.barrier()  # Ensure all ranks ready before broadcast
         start_epoch_tensor = torch.tensor(start_epoch, device=device)
         torch.distributed.broadcast(start_epoch_tensor, src=0)
         start_epoch = start_epoch_tensor.item()
@@ -756,6 +805,12 @@ def train_phase1(config: Dict[str, Any]):
                     'val/accuracy': val_log['acc'],
                     'learning_rate': optimizer.param_groups[0]['lr'],
                 }
+                # Add medical-grade metrics if available
+                if 'sensitivity' in val_log and np.isfinite(val_log['sensitivity']):
+                    wandb_log['val/sensitivity'] = val_log['sensitivity']
+                    wandb_log['val/specificity'] = val_log['specificity']
+                    wandb_log['val/opt_threshold'] = val_log.get('opt_threshold', 0.5)
+                
                 if torch.cuda.is_available():
                     wandb_log['gpu/memory_allocated_gb'] = torch.cuda.memory_allocated() / 1024**3
                     wandb_log['gpu/memory_reserved_gb'] = torch.cuda.memory_reserved() / 1024**3
@@ -768,11 +823,19 @@ def train_phase1(config: Dict[str, Any]):
         if improved:
             best_score = cur_score
             patience_counter = 0
+            # Save comprehensive best metrics for medical reporting
             best_metrics = {
                 'epoch': epoch,
                 'score_key': best_key,
                 'score': float(best_score),
-                'val': {k: float(val_log[k]) if isinstance(val_log[k], (int, float, np.floating)) else None for k in ['loss', 'auc', 'acc']}
+                'val': {
+                    'loss': float(val_log['loss']),
+                    'auc': float(val_log['auc']),
+                    'acc': float(val_log['acc']),
+                    'sensitivity': float(val_log.get('sensitivity', float('nan'))),
+                    'specificity': float(val_log.get('specificity', float('nan'))),
+                    'opt_threshold': float(val_log.get('opt_threshold', 0.5)),
+                }
             }
             # Save best model (main process only)
             if is_main_process(rank):
@@ -784,6 +847,12 @@ def train_phase1(config: Dict[str, Any]):
                     wandb.run.summary['best_val_acc'] = float(val_log['acc'])
                     wandb.run.summary['best_val_loss'] = float(val_log['loss'])
                     wandb.run.summary['best_val_opt_threshold'] = float(val_log.get('opt_threshold', 0.5))
+                    
+                    # Medical-grade metrics
+                    if 'sensitivity' in val_log and np.isfinite(val_log['sensitivity']):
+                        wandb.run.summary['best_val_sensitivity'] = float(val_log['sensitivity'])
+                        wandb.run.summary['best_val_specificity'] = float(val_log['specificity'])
+                    
                     if 'report_opt' in val_log and isinstance(val_log['report_opt'], dict):
                         her2_pos_metrics = val_log['report_opt'].get('HER2+', {})
                         wandb.run.summary['best_val_pos_precision'] = her2_pos_metrics.get('precision')
