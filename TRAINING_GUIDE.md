@@ -83,29 +83,22 @@ cat outputs/phase1/logs/best.json
 | Optional stain norm | `enable_stain_norm` flag; disable Macenko for speed benchmarking |
 | DataLoader opts | `prefetch_factor`, `persistent_workers` for optimized CPU→GPU pipelining |
 
-## Medical Deployment Notes
+## Clinical Deployment Notes
 
 1. Use focal loss if HER2+ minority < 30%.
-2. Monitor HER2+ recall; aim ≥ 0.90 for clinical screening.
-3. Adjust decision threshold using logged `opt_threshold` rather than fixed 0.5 if improving sensitivity is desired.
-4. Always validate on an external cohort before deployment.
-5. Record hardware, software versions (see benchmark summary) for audit trail.
+2. Monitor HER2+ recall; aim ≥ 0.90 for screening.
+3. Prefer `opt_threshold` (Youden) over fixed 0.5 if it improves sensitivity w/ tolerable specificity.
+4. Validate on an external cohort (different scanner/site) before downstream use.
+5. Record hardware, software versions and commit hash for audit.
 
-## Benchmark Summary Artifacts
-
-Running the benchmark script produces:
-- `benchmark_results.json` – full metrics
-- `benchmark_summary.md` – concise human-readable report
-- `training_curves.png` – visual loss/AUC progression
-
-## Suggested Evaluation Checklist (Clinical)
+## Clinical Evaluation Checklist
 
 - [ ] AUC ≥ 0.95 on validation cohort
 - [ ] HER2+ recall ≥ 0.90
 - [ ] False negative analysis performed on misclassified HER2+ patches
 - [ ] Threshold tuned (opt_threshold vs 0.5) documented
 - [ ] Reproducibility: seed + commit hash recorded
-- [ ] Benchmark artifacts archived
+ 
 
 
 ## 🐛 Recent Bug Fixes (Critical for Medical Use)
