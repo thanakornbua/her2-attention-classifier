@@ -37,6 +37,14 @@ batch_size: 64               # Larger is better with multi-GPU
 epochs: 50                   # More epochs for convergence
 early_stop_patience: 15      # Stop if no improvement
 use_amp: true                # Mixed precision (faster)
+
+# Optional performance optimizations
+use_compile: true            # PyTorch 2.x JIT compilation (20-30% faster)
+compile_mode: 'default'      # or 'reduce-overhead', 'max-autotune'
+grad_clip_norm: 1.0          # Gradient clipping for stability
+enable_stain_norm: true      # Macenko normalization (heavy; disable for speed benchmarking)
+prefetch_factor: 2           # DataLoader prefetch batches (default=2)
+persistent_workers: true     # Keep workers alive across epochs
 ```
 
 ## Monitor Training
@@ -59,13 +67,17 @@ cat outputs/phase1/logs/best.json
 | Proper data sharding | `DistributedSampler` for train/val, `set_epoch(epoch)` each loop |
 | Inter-process sync | Parameter broadcast after resume & fresh init (`broadcast_model_parameters`), loss all_reduce, prediction all_gather |
 | Benchmarking | `train_phase1_benchmark.py` with time, AUC progression, GPU util, markdown summary |
-| Reproducibility | `set_seed()` seeds Python, NumPy, Torch + cudnn deterministic settings |
+| Reproducibility | `set_seed()` seeds Python, NumPy, Torch + cudnn deterministic settings; worker_init_fn seeds each DataLoader worker |
 | Checkpoint robustness | Rank 0 only saves; resume loads + broadcasts to other ranks |
 | Config toggles | Flags: `use_ddp`, `use_amp`, `accumulation_steps`, `loss_type`, `use_class_weights`, `early_stop_patience` |
 | Medical metrics | Optimal threshold (Youden), HER2+ precision/recall/F1 logged on improvement |
 | Graceful CPU fallback | Backend `gloo` if CUDA absent, device selects CPU |
 | Gradient accumulation | Division by `accumulation_steps` + stepped only when boundary reached |
 | Early stopping | Patience counter with configurable `early_stop_patience` |
+| Gradient clipping | `grad_clip_norm` config; unscale before clipping with AMP |
+| torch.compile | Optional `use_compile` flag for PyTorch 2.x JIT compilation (faster inference/training) |
+| Optional stain norm | `enable_stain_norm` flag; disable Macenko for speed benchmarking |
+| DataLoader opts | `prefetch_factor`, `persistent_workers` for optimized CPU→GPU pipelining |
 
 ## Medical Deployment Notes
 

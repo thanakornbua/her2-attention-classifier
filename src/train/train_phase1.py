@@ -52,6 +52,7 @@ from torch.utils.data.distributed import DistributedSampler
 from torch.nn.parallel import DistributedDataParallel as DDP
 from torch.utils.tensorboard import SummaryWriter
 from torch.cuda.amp import autocast, GradScaler
+from torch.nn.utils import clip_grad_norm_
 import torchvision.transforms as T
 import torchvision.models as models
 import gc
@@ -118,9 +119,10 @@ class MacenkoNormalizeTransform:
         return Image.fromarray(norm)
 
 
-def build_transforms(input_size: int, train: bool = True):
+def build_transforms(input_size: int, train: bool = True, enable_stain_norm: bool = True):
     tfms = []
-    tfms.append(MacenkoNormalizeTransform())
+    if enable_stain_norm:
+        tfms.append(MacenkoNormalizeTransform())
     tfms.append(T.Resize((input_size, input_size)))
     if train:
         tfms.extend([
@@ -236,7 +238,7 @@ def broadcast_model_parameters(model):
         torch.distributed.broadcast(b.data, src=0)
 
 
-def train_one_epoch(model, loader, criterion, optimizer, device, rank=0, accumulation_steps=1, use_amp=True, epoch=None, log_wandb=False, global_step=None):
+def train_one_epoch(model, loader, criterion, optimizer, device, rank=0, accumulation_steps=1, use_amp=True, epoch=None, log_wandb=False, global_step=None, grad_clip_norm: float = 0.0):
     """Optimized training loop with DDP support."""
     model.train()
     running_loss = 0.0
@@ -265,6 +267,9 @@ def train_one_epoch(model, loader, criterion, optimizer, device, rank=0, accumul
         
         # Optimizer step with gradient accumulation
         if (batch_idx + 1) % accumulation_steps == 0:
+            if grad_clip_norm and grad_clip_norm > 0:
+                scaler.unscale_(optimizer)
+                clip_grad_norm_(model.parameters(), max_norm=grad_clip_norm)
             scaler.step(optimizer)
             scaler.update()
             optimizer.zero_grad(set_to_none=True)
@@ -290,6 +295,9 @@ def train_one_epoch(model, loader, criterion, optimizer, device, rank=0, accumul
     
     # Handle final accumulation step
     if len(loader) % accumulation_steps != 0:
+        if grad_clip_norm and grad_clip_norm > 0:
+            scaler.unscale_(optimizer)
+            clip_grad_norm_(model.parameters(), max_norm=grad_clip_norm)
         scaler.step(optimizer)
         scaler.update()
         optimizer.zero_grad(set_to_none=True)
@@ -446,11 +454,19 @@ def _with_defaults(user_cfg: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def calculate_class_weights(train_csv, label_col):
-    """Calculate class weights for imbalanced datasets (medical-grade)."""
+    """Robust class weight calculation for binary labels.
+
+    Ensures both classes 0 and 1 have non-zero counts (floors to 1) to avoid
+    division by zero in extreme imbalance scenarios.
+    """
     df = pd.read_csv(train_csv)
-    labels = df[label_col].values
-    class_counts = np.bincount(labels)
-    total = len(labels)
+    labels = df[label_col].astype(int).values
+    counts = {0: 0, 1: 0}
+    for k, v in pd.Series(labels).value_counts().items():
+        counts[int(k)] = int(v)
+    class_counts = np.array([counts[0], counts[1]], dtype=np.float32)
+    class_counts[class_counts == 0] = 1.0
+    total = class_counts.sum()
     weights = total / (len(class_counts) * class_counts)
     return torch.tensor(weights, dtype=torch.float32)
 
@@ -533,8 +549,9 @@ def train_phase1(config: Dict[str, Any]):
             print("Weights & Biases logging disabled")
 
     # Datasets and loaders
-    train_tfms = build_transforms(int(cfg['input_size']), train=True)
-    val_tfms = build_transforms(int(cfg['input_size']), train=False)
+    enable_stain_norm = bool(cfg.get('enable_stain_norm', True))
+    train_tfms = build_transforms(int(cfg['input_size']), train=True, enable_stain_norm=enable_stain_norm)
+    val_tfms = build_transforms(int(cfg['input_size']), train=False, enable_stain_norm=enable_stain_norm)
 
     train_set = PatchDataset(cfg['train_csv'], cfg['path_col'], cfg['label_col'], transform=train_tfms)
     val_set = PatchDataset(cfg['val_csv'], cfg['path_col'], cfg['label_col'], transform=val_tfms)
@@ -544,6 +561,15 @@ def train_phase1(config: Dict[str, Any]):
     val_sampler = DistributedSampler(val_set, num_replicas=world_size, rank=rank, shuffle=False) if use_ddp else None
     
     pin_mem = torch.cuda.is_available()
+    prefetch_factor = int(cfg.get('prefetch_factor', 2))
+    persistent_workers = bool(cfg.get('persistent_workers', True)) and int(cfg['num_workers']) > 0
+    def _worker_init_fn(worker_id):
+        base_seed = int(cfg.get('seed', 42))
+        seed = base_seed + worker_id
+        random.seed(seed)
+        np.random.seed(seed)
+        torch.manual_seed(seed)
+
     train_loader = DataLoader(
         train_set,
         batch_size=int(cfg['batch_size']),
@@ -551,6 +577,9 @@ def train_phase1(config: Dict[str, Any]):
         sampler=train_sampler,
         num_workers=int(cfg['num_workers']),
         pin_memory=pin_mem,
+        prefetch_factor=prefetch_factor if int(cfg['num_workers']) > 0 else None,
+        persistent_workers=persistent_workers,
+        worker_init_fn=_worker_init_fn if int(cfg['num_workers']) > 0 else None,
     )
     val_loader = DataLoader(
         val_set,
@@ -559,11 +588,24 @@ def train_phase1(config: Dict[str, Any]):
         sampler=val_sampler,
         num_workers=int(cfg['num_workers']),
         pin_memory=pin_mem,
+        prefetch_factor=prefetch_factor if int(cfg['num_workers']) > 0 else None,
+        persistent_workers=persistent_workers,
+        worker_init_fn=_worker_init_fn if int(cfg['num_workers']) > 0 else None,
     )
 
     # Model and optimizer
     model, last_conv = build_resnet50(cfg.get('pretrained', True))
     model = model.to(device)
+    # Optional PyTorch 2.x compile for speed
+    if bool(cfg.get('use_compile', False)) and hasattr(torch, 'compile'):
+        try:
+            compile_mode = cfg.get('compile_mode', 'default')
+            model = torch.compile(model, mode=compile_mode)
+            if is_main_process(rank):
+                print(f"Model compiled (mode={compile_mode})")
+        except Exception as e:
+            if is_main_process(rank):
+                print(f"torch.compile failed: {e}; continuing without compilation")
     
     # Wrap model in DDP if enabled
     if use_ddp:
@@ -583,7 +625,7 @@ def train_phase1(config: Dict[str, Any]):
         if is_main_process(rank):
             print(f"Using class weights for imbalanced dataset: {class_weights.tolist()}")
     
-    criterion = build_criterion(loss_type=loss_type, class_weights=class_weights)
+    criterion = build_criterion(loss_type=loss_type, class_weights=class_weights).to(device)
     optimizer = build_optimizer(model, lr=float(cfg['lr']), weight_decay=float(cfg['weight_decay']))
     
     # Cosine annealing LR scheduler for better convergence
@@ -672,7 +714,20 @@ def train_phase1(config: Dict[str, Any]):
             train_sampler.set_epoch(epoch)
         
         t0 = time.time()
-        train_log = train_one_epoch(model, train_loader, criterion, optimizer, device, rank, accumulation_steps, use_amp, epoch=epoch+1, log_wandb=use_wandb, global_step=global_step)
+        train_log = train_one_epoch(
+            model,
+            train_loader,
+            criterion,
+            optimizer,
+            device,
+            rank,
+            accumulation_steps,
+            use_amp,
+            epoch=epoch+1,
+            log_wandb=use_wandb,
+            global_step=global_step,
+            grad_clip_norm=float(cfg.get('grad_clip_norm', 0.0))
+        )
         global_step = train_log.get('global_step', global_step)
         val_log = evaluate(model, val_loader, criterion, device, rank, use_amp, epoch=epoch+1)
         history.append({'train': {k: v for k, v in train_log.items() if k != 'global_step'}, 'val': {k: val_log[k] for k in ['loss', 'auc', 'acc']}})
