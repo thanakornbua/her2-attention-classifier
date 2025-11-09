@@ -1,9 +1,13 @@
 """
-Phase 1 patch-level training entrypoint (ResNet-50).
+Phase 1 patch-level training entrypoint (ResNet-50) with DDP support.
 
 Usage:
+    # Single GPU/CPU
     from src.train.train_phase1 import train_phase1
     results = train_phase1(config)
+    
+    # Multi-GPU DDP (recommended)
+    torchrun --nproc_per_node=2 -m src.train.train_phase1_ddp --config config.yaml
 
 Expected config keys (with defaults):
     - train_csv: str, path to training CSV with columns [path, label]
@@ -11,7 +15,7 @@ Expected config keys (with defaults):
     - output_dir: str, directory to save models/logs/visualizations
     - pretrained: bool, load ImageNet weights for ResNet-50
     - input_size: int, resize side for patches (e.g., 224 or 512)
-    - batch_size: int
+    - batch_size: int (per GPU)
     - num_workers: int
     - epochs: int
     - lr: float
@@ -20,8 +24,11 @@ Expected config keys (with defaults):
     - path_col: str, name of image path column (default 'path')
     - save_best_by: 'auc' or 'acc'
     - seed: int, random seed (default 42)
-Notice
-	- Do not run this file as multithreaded job. If wish to do so, Please ensure completeness of loops first.
+    - use_amp: bool, enable mixed precision (default True on CUDA)
+    - accumulation_steps: int, gradient accumulation (default 1)
+    - use_ddp: bool, enable distributed training (default False)
+    - use_focal_loss: bool, use focal loss for imbalanced data (default False)
+    - early_stopping_patience: int, epochs to wait before stopping (default 0=disabled)
 """
 
 from __future__ import annotations
@@ -31,7 +38,7 @@ import json
 import time
 import random
 from pathlib import Path
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 
 import numpy as np
 import pandas as pd
@@ -41,6 +48,8 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import Dataset, DataLoader
+from torch.utils.data.distributed import DistributedSampler
+from torch.nn.parallel import DistributedDataParallel as DDP
 from torch.utils.tensorboard import SummaryWriter
 from torch.cuda.amp import autocast, GradScaler
 import torchvision.transforms as T
@@ -59,7 +68,33 @@ try:
     WANDB_AVAILABLE = True
 except ImportError:
     WANDB_AVAILABLE = False
-    print("Warning: wandb not installed. Install with: pip install wandb")
+
+# Distributed utilities
+def setup_distributed():
+    """Initialize distributed training if launched via torchrun.
+    Returns (rank, world_size, local_rank). Falls back to (0,1,0) if not distributed.
+    """
+    if 'RANK' in os.environ and 'WORLD_SIZE' in os.environ:
+        rank = int(os.environ['RANK'])
+        world_size = int(os.environ['WORLD_SIZE'])
+        local_rank = int(os.environ.get('LOCAL_RANK', 0))
+        if torch.cuda.is_available():
+            torch.cuda.set_device(local_rank)
+            backend = 'nccl'
+        else:
+            backend = 'gloo'
+        torch.distributed.init_process_group(backend=backend, init_method='env://')
+        return rank, world_size, local_rank
+    return 0, 1, 0
+
+def cleanup_distributed():
+    """Clean up distributed process group."""
+    if torch.distributed.is_initialized():
+        torch.distributed.destroy_process_group()
+
+def is_main_process(rank: int = 0) -> bool:
+    """Check if current process is main (rank 0)."""
+    return rank == 0
 
 
 def set_seed(seed: int = 42):
@@ -154,20 +189,65 @@ def build_optimizer(model, lr=1e-4, weight_decay=1e-4):
     return optim.AdamW(model.parameters(), lr=lr, weight_decay=weight_decay)
 
 
-def train_one_epoch(model, loader, criterion, optimizer, device, accumulation_steps=1, use_amp=True, epoch=None, log_wandb=False, global_step=None):
+class FocalLoss(nn.Module):
+    """Focal Loss for handling class imbalance (medical applications).
+    
+    Focuses on hard-to-classify examples, improves recall on minority class.
+    Recommended for HER2 when positive cases are <30% of dataset.
+    """
+    def __init__(self, alpha=0.25, gamma=2.0):
+        super().__init__()
+        self.alpha = alpha
+        self.gamma = gamma
+    
+    def forward(self, inputs, targets):
+        ce_loss = nn.functional.cross_entropy(inputs, targets, reduction='none')
+        pt = torch.exp(-ce_loss)
+        focal_loss = self.alpha * (1 - pt) ** self.gamma * ce_loss
+        return focal_loss.mean()
+
+
+def build_criterion(loss_type: str = 'cross_entropy', class_weights=None):
+    """Build loss function.
+    Args:
+        loss_type: 'cross_entropy' or 'focal'
+        class_weights: optional tensor/list of shape [num_classes]
+    """
+    if loss_type == 'focal':
+        return FocalLoss(alpha=0.25, gamma=2.0)
+    if class_weights is not None:
+        # Keep provided weights as-is if tensor; else convert to tensor
+        if not torch.is_tensor(class_weights):
+            class_weights = torch.tensor(class_weights, dtype=torch.float32)
+        return nn.CrossEntropyLoss(weight=class_weights)
+    return nn.CrossEntropyLoss()
+
+
+def broadcast_model_parameters(model):
+    """Broadcast parameters and buffers from rank 0 to all ranks.
+    Should be called after loading checkpoint on rank 0 or after fresh init.
+    """
+    if not torch.distributed.is_initialized():
+        return
+    module = model.module if isinstance(model, DDP) else model
+    for p in module.parameters():
+        torch.distributed.broadcast(p.data, src=0)
+    for b in module.buffers():
+        torch.distributed.broadcast(b.data, src=0)
+
+
+def train_one_epoch(model, loader, criterion, optimizer, device, rank=0, accumulation_steps=1, use_amp=True, epoch=None, log_wandb=False, global_step=None):
+    """Optimized training loop with DDP support."""
     model.train()
     running_loss = 0.0
+    sample_count = 0
     all_targets, all_probs = [], []
     optimizer.zero_grad(set_to_none=True)
     
-    # Mixed precision scaler
-    scaler = GradScaler() if use_amp else None
-    
-    # Progress bar
+    scaler = GradScaler(enabled=use_amp)
     desc = f"Epoch {epoch} [Train]" if epoch is not None else "Training"
-    pbar = tqdm(enumerate(loader), total=len(loader), desc=desc, leave=False)
+    pbar = tqdm(enumerate(loader), total=len(loader), desc=desc, leave=False, disable=not is_main_process(rank))
     
-    # Initialize global step if not provided
     if global_step is None:
         global_step = 0
     
@@ -175,152 +255,159 @@ def train_one_epoch(model, loader, criterion, optimizer, device, accumulation_st
         imgs = imgs.to(device, non_blocking=True)
         labels = labels.to(device, non_blocking=True)
         
-        # Mixed precision forward pass
-        if use_amp:
-            with autocast():
-                logits = model(imgs)
-                loss = criterion(logits, labels)
-        else:
+        # Forward with autocast (handles AMP enabled/disabled internally)
+        with autocast(enabled=use_amp):
             logits = model(imgs)
-            loss = criterion(logits, labels)
+            loss = criterion(logits, labels) / accumulation_steps
         
-        # Normalize loss for gradient accumulation
-        loss = loss / accumulation_steps
+        # Backward
+        scaler.scale(loss).backward()
         
-        # Backward pass with mixed precision
-        if use_amp:
-            scaler.scale(loss).backward()
-        else:
-            loss.backward()
-        
-        # Update weights every accumulation_steps batches
+        # Optimizer step with gradient accumulation
         if (batch_idx + 1) % accumulation_steps == 0:
-            if use_amp:
-                scaler.step(optimizer)
-                scaler.update()
-            else:
-                optimizer.step()
+            scaler.step(optimizer)
+            scaler.update()
             optimizer.zero_grad(set_to_none=True)
         
-        running_loss += loss.item() * imgs.size(0) * accumulation_steps
-        
-        # Detach and move to CPU immediately to free GPU memory
+        # Metrics tracking
+        batch_size = imgs.size(0)
+        running_loss += loss.item() * batch_size * accumulation_steps
+        sample_count += batch_size
         with torch.no_grad():
-            if use_amp:
-                # Compute probs in float32 for numerical stability
-                probs = torch.softmax(logits.float(), dim=1)[:, 1].cpu().numpy()
-            else:
-                probs = torch.softmax(logits, dim=1)[:, 1].cpu().numpy()
+            probs = torch.softmax(logits.float(), dim=1)[:, 1].cpu().numpy()
         all_probs.extend(probs.tolist())
         all_targets.extend(labels.cpu().numpy().tolist())
         
-        # Update progress bar with current loss
-        current_loss = running_loss / ((batch_idx + 1) * imgs.size(0))
-        pbar.set_postfix({'loss': f'{current_loss:.4f}'})
+        # Progress bar update
+        if is_main_process(rank):
+            pbar.set_postfix({'loss': f'{running_loss / ((batch_idx + 1) * imgs.size(0)):.4f}'})
         
-        # Log batch metrics to wandb every N steps
-        if log_wandb and batch_idx % 10 == 0:
-            try:
-                import wandb
-                wandb.log({
-                    'batch/train_loss': current_loss,
-                    'batch/step': global_step + batch_idx,
-                }, step=global_step + batch_idx)
-            except:
-                pass
-        
-        # Free GPU memory explicitly
-        del imgs, labels, logits, loss, probs
-        
-        # More aggressive memory cleanup for small GPUs
-        if batch_idx % 10 == 0:
-            torch.cuda.empty_cache()
+        # Periodic wandb logging (main process only)
+        if log_wandb and is_main_process(rank) and batch_idx % 10 == 0:
+            wandb.log({'batch/train_loss': running_loss / ((batch_idx + 1) * imgs.size(0)), 'batch/step': global_step + batch_idx}, step=global_step + batch_idx)
     
     pbar.close()
     
-    # Handle remaining gradients if batches don't divide evenly
+    # Handle final accumulation step
     if len(loader) % accumulation_steps != 0:
-        if use_amp:
-            scaler.step(optimizer)
-            scaler.update()
-        else:
-            optimizer.step()
+        scaler.step(optimizer)
+        scaler.update()
         optimizer.zero_grad(set_to_none=True)
     
-    epoch_loss = running_loss / len(loader.dataset)
+    # Aggregate metrics across all processes in DDP
+    if torch.distributed.is_initialized():
+        loss_sum = torch.tensor(running_loss, device=device)
+        count_sum = torch.tensor(sample_count, device=device, dtype=torch.long)
+        torch.distributed.all_reduce(loss_sum, op=torch.distributed.ReduceOp.SUM)
+        torch.distributed.all_reduce(count_sum, op=torch.distributed.ReduceOp.SUM)
+        epoch_loss = (loss_sum / count_sum.clamp(min=1)).item()
+    else:
+        epoch_loss = running_loss / max(sample_count, 1)
+    
+    # Gather predictions for global train metrics
+    global_targets, global_probs = all_targets, all_probs
+    if torch.distributed.is_initialized():
+        gathered_t, gathered_p = [None]*torch.distributed.get_world_size(), [None]*torch.distributed.get_world_size()
+        torch.distributed.all_gather_object(gathered_t, all_targets)
+        torch.distributed.all_gather_object(gathered_p, all_probs)
+        global_targets = [x for sub in gathered_t for x in sub]
+        global_probs = [x for sub in gathered_p for x in sub]
+
     try:
-        epoch_auc = roc_auc_score(all_targets, all_probs)
+        epoch_auc = roc_auc_score(global_targets, global_probs)
     except Exception:
         epoch_auc = float('nan')
-    preds = (np.array(all_probs) >= 0.5).astype(int)
-    epoch_acc = accuracy_score(all_targets, preds)
+    preds = (np.array(global_probs) >= 0.5).astype(int)
+    epoch_acc = accuracy_score(global_targets, preds) if len(global_targets)==len(preds) and len(preds)>0 else float('nan')
     
-    # Return global step for next epoch
     return {'loss': epoch_loss, 'auc': epoch_auc, 'acc': epoch_acc, 'global_step': global_step + len(loader)}
 
 
-def evaluate(model, loader, criterion, device, use_amp=True, epoch=None):
+def evaluate(model, loader, criterion, device, rank=0, use_amp=True, epoch=None):
+    """Optimized evaluation with DDP support and global AUC on rank 0.
+    Uses all_gather_object to aggregate predictions/targets across processes.
+    """
     model.eval()
     running_loss = 0.0
+    sample_count = 0
     all_targets, all_probs = [], []
     
-    # Progress bar
     desc = f"Epoch {epoch} [Val]" if epoch is not None else "Evaluating"
-    pbar = tqdm(enumerate(loader), total=len(loader), desc=desc, leave=False)
+    pbar = tqdm(enumerate(loader), total=len(loader), desc=desc, leave=False, disable=not is_main_process(rank))
     
     with torch.no_grad():
         for batch_idx, (imgs, labels, _) in pbar:
             imgs = imgs.to(device, non_blocking=True)
             labels = labels.to(device, non_blocking=True)
-            
-            # Mixed precision forward pass
-            if use_amp:
-                with autocast():
-                    logits = model(imgs)
-                    loss = criterion(logits, labels)
-            else:
+            with autocast(enabled=use_amp):
                 logits = model(imgs)
                 loss = criterion(logits, labels)
-            
-            running_loss += loss.item() * imgs.size(0)
-            
-            if use_amp:
-                probs = torch.softmax(logits.float(), dim=1)[:, 1].cpu().numpy()
-            else:
-                probs = torch.softmax(logits, dim=1)[:, 1].cpu().numpy()
-            
-            all_probs.extend(probs.tolist())
-            all_targets.extend(labels.cpu().numpy().tolist())
-            
-            # Update progress bar with current loss
-            current_loss = running_loss / ((batch_idx + 1) * imgs.size(0))
-            pbar.set_postfix({'loss': f'{current_loss:.4f}'})
-            
-            # Free GPU memory explicitly
-            del imgs, labels, logits, loss, probs
-            # More aggressive memory cleanup for small GPUs
-            if batch_idx % 10 == 0:
-                torch.cuda.empty_cache()
-    
+            batch_size = imgs.size(0)
+            running_loss += loss.item() * batch_size
+            sample_count += batch_size
+            probs = torch.softmax(logits.float(), dim=1)[:, 1].detach().cpu().numpy().tolist()
+            all_probs.extend(probs)
+            all_targets.extend(labels.detach().cpu().numpy().tolist())
+            if is_main_process(rank):
+                pbar.set_postfix({'loss': f'{running_loss / ((batch_idx + 1) * imgs.size(0)):.4f}'})
     pbar.close()
     
-    epoch_loss = running_loss / len(loader.dataset)
+    # Aggregate loss across DDP processes
+    if torch.distributed.is_initialized():
+        loss_sum = torch.tensor(running_loss, device=device)
+        count_sum = torch.tensor(sample_count, device=device, dtype=torch.long)
+        torch.distributed.all_reduce(loss_sum, op=torch.distributed.ReduceOp.SUM)
+        torch.distributed.all_reduce(count_sum, op=torch.distributed.ReduceOp.SUM)
+        epoch_loss = (loss_sum / count_sum.clamp(min=1)).item()
+    else:
+        epoch_loss = running_loss / max(sample_count, 1)
+    
+    # Gather predictions/targets from all ranks for correct global AUC
+    global_targets, global_probs = all_targets, all_probs
+    if torch.distributed.is_initialized():
+        gathered_targets, gathered_probs = [None] * torch.distributed.get_world_size(), [None] * torch.distributed.get_world_size()
+        torch.distributed.all_gather_object(gathered_targets, all_targets)
+        torch.distributed.all_gather_object(gathered_probs, all_probs)
+        # Flatten lists
+        global_targets = [t for sub in gathered_targets for t in sub]
+        global_probs = [p for sub in gathered_probs for p in sub]
+    
+    # Compute metrics (on rank 0 for reporting)
+    # Compute optimal threshold (Youden's J)
+    def _optimal_threshold(y_true, y_prob):
+        try:
+            from sklearn.metrics import roc_curve
+            fpr, tpr, thr = roc_curve(y_true, y_prob)
+            j = tpr - fpr
+            return float(thr[np.argmax(j)])
+        except Exception:
+            return 0.5
+
+    opt_thr = _optimal_threshold(global_targets, global_probs)
     try:
-        epoch_auc = roc_auc_score(all_targets, all_probs)
+        epoch_auc = roc_auc_score(global_targets, global_probs)
     except Exception:
         epoch_auc = float('nan')
-    preds = (np.array(all_probs) >= 0.5).astype(int)
-    epoch_acc = accuracy_score(all_targets, preds)
-    cm = confusion_matrix(all_targets, preds)
-    cls_report = classification_report(all_targets, preds, target_names=['HER2-', 'HER2+'], output_dict=True)
+    preds = (np.array(global_probs) >= 0.5).astype(int)
+    preds_opt = (np.array(global_probs) >= opt_thr).astype(int)
+    epoch_acc = accuracy_score(global_targets, preds) if len(global_targets) == len(preds) and len(preds) > 0 else float('nan')
+    acc_opt = accuracy_score(global_targets, preds_opt) if len(global_targets) == len(preds_opt) and len(preds_opt) > 0 else float('nan')
+    cm = confusion_matrix(global_targets, preds) if np.isfinite(epoch_acc) else np.array([[0, 0], [0, 0]])
+    cm_opt = confusion_matrix(global_targets, preds_opt) if np.isfinite(acc_opt) else np.array([[0, 0], [0, 0]])
+    cls_report = classification_report(global_targets, preds, target_names=['HER2-', 'HER2+'], output_dict=True) if np.isfinite(epoch_acc) else {}
+    cls_report_opt = classification_report(global_targets, preds_opt, target_names=['HER2-', 'HER2+'], output_dict=True) if np.isfinite(acc_opt) else {}
+    
     return {
         'loss': epoch_loss,
         'auc': epoch_auc,
         'acc': epoch_acc,
         'cm': cm,
+        'cm_opt': cm_opt,
         'report': cls_report,
-        'targets': all_targets,
-        'probs': all_probs,
+        'report_opt': cls_report_opt,
+        'opt_threshold': opt_thr,
+        'targets': global_targets,
+        'probs': global_probs,
     }
 
 
@@ -358,8 +445,18 @@ def _with_defaults(user_cfg: Dict[str, Any]) -> Dict[str, Any]:
     return cfg
 
 
+def calculate_class_weights(train_csv, label_col):
+    """Calculate class weights for imbalanced datasets (medical-grade)."""
+    df = pd.read_csv(train_csv)
+    labels = df[label_col].values
+    class_counts = np.bincount(labels)
+    total = len(labels)
+    weights = total / (len(class_counts) * class_counts)
+    return torch.tensor(weights, dtype=torch.float32)
+
+
 def train_phase1(config: Dict[str, Any]):
-    """Run Phase 1 training (ResNet-50) and save best model/logs.
+    """Run Phase 1 training (ResNet-50) with DDP support and medical-grade optimizations.
 
     Args:
         config: dict containing training configuration. See module docstring for keys.
@@ -368,33 +465,41 @@ def train_phase1(config: Dict[str, Any]):
         dict with keys: best_model_path, best_metrics, logs_dir, models_dir
     """
     cfg = _with_defaults(config)
-
+    
+    # Initialize DDP if enabled
+    use_ddp = cfg.get('use_ddp', False)
+    rank = 0
+    world_size = 1
+    local_rank = 0
+    if use_ddp:
+        rank, world_size, local_rank = setup_distributed()
+    
     set_seed(int(cfg.get('seed', 42)))
-    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    if torch.cuda.is_available():
+        device = torch.device(f'cuda:{local_rank}')
+    else:
+        device = torch.device('cpu')
 
     out_dir = Path(cfg['output_dir'])
     models_dir = out_dir / 'models'
     logs_dir = out_dir / 'logs'
     vis_dir = out_dir / 'gradcam'
     tb_dir = out_dir / 'tensorboard'
-    for d in [out_dir, models_dir, logs_dir, vis_dir, tb_dir]:
-        d.mkdir(parents=True, exist_ok=True)
+    if is_main_process(rank):
+        for d in [out_dir, models_dir, logs_dir, vis_dir, tb_dir]:
+            d.mkdir(parents=True, exist_ok=True)
     
-    # Initialize TensorBoard writer
-    writer = SummaryWriter(log_dir=str(tb_dir))
-    
-    # Define checkpoint path and resume flag early
+    # Initialize TensorBoard and W&B on main process only
+    writer = SummaryWriter(log_dir=str(tb_dir)) if is_main_process(rank) else None
     checkpoint_path = models_dir / 'checkpoint_last.pth'
     resume_training = cfg.get('resume', True)
     
-    # Initialize Weights & Biases
-    use_wandb = cfg.get('use_wandb', True) and WANDB_AVAILABLE
+    use_wandb = cfg.get('use_wandb', True) and WANDB_AVAILABLE and is_main_process(rank)
     wandb_id = None
     if use_wandb:
         wandb_project = cfg.get('wandb_project', 'her2-classification')
         wandb_name = cfg.get('wandb_name', f"phase1_bs{cfg['batch_size']}_size{cfg['input_size']}")
         
-        # Check if resuming and get wandb run ID from checkpoint
         if resume_training and checkpoint_path.exists():
             try:
                 checkpoint = torch.load(checkpoint_path, map_location='cpu')
@@ -413,11 +518,7 @@ def train_phase1(config: Dict[str, Any]):
                 tags=['phase1', 'resnet50', 'her2-classifier'],
                 id=wandb_id,
                 resume='allow' if wandb_id else None,
-                settings=wandb.Settings(
-                    code_dir=None,  # Disable code artifact logging
-                    _disable_stats=False,
-                    _disable_meta=False,
-                )
+                settings=wandb.Settings(code_dir=None, _disable_stats=False, _disable_meta=False)
             )
             wandb_id = wandb.run.id
             print(f"Weights & Biases initialized: {wandb_project}/{wandb_name}")
@@ -425,7 +526,7 @@ def train_phase1(config: Dict[str, Any]):
             print(f"Warning: Failed to initialize Weights & Biases: {e}")
             print("Continuing with TensorBoard logging only")
             use_wandb = False
-    else:
+    elif is_main_process(rank):
         if not WANDB_AVAILABLE:
             print("Weights & Biases not available - install with: pip install wandb")
         else:
@@ -438,11 +539,16 @@ def train_phase1(config: Dict[str, Any]):
     train_set = PatchDataset(cfg['train_csv'], cfg['path_col'], cfg['label_col'], transform=train_tfms)
     val_set = PatchDataset(cfg['val_csv'], cfg['path_col'], cfg['label_col'], transform=val_tfms)
 
+    # Use DistributedSampler for DDP
+    train_sampler = DistributedSampler(train_set, num_replicas=world_size, rank=rank, shuffle=True) if use_ddp else None
+    val_sampler = DistributedSampler(val_set, num_replicas=world_size, rank=rank, shuffle=False) if use_ddp else None
+    
     pin_mem = torch.cuda.is_available()
     train_loader = DataLoader(
         train_set,
         batch_size=int(cfg['batch_size']),
-        shuffle=True,
+        shuffle=(train_sampler is None),  # Only shuffle if not using DDP
+        sampler=train_sampler,
         num_workers=int(cfg['num_workers']),
         pin_memory=pin_mem,
     )
@@ -450,20 +556,43 @@ def train_phase1(config: Dict[str, Any]):
         val_set,
         batch_size=int(cfg['batch_size']),
         shuffle=False,
+        sampler=val_sampler,
         num_workers=int(cfg['num_workers']),
         pin_memory=pin_mem,
     )
 
-    # Model, loss, optimizer
+    # Model and optimizer
     model, last_conv = build_resnet50(cfg.get('pretrained', True))
     model = model.to(device)
-    criterion = nn.CrossEntropyLoss()
+    
+    # Wrap model in DDP if enabled
+    if use_ddp:
+        if torch.cuda.is_available():
+            model = DDP(model, device_ids=[local_rank], output_device=local_rank)
+        else:
+            model = DDP(model)
+        if is_main_process(rank):
+            print(f"Model wrapped in DistributedDataParallel (world_size={world_size}, local_rank={local_rank})")
+    
+    # Medical-grade loss function with optional focal loss and class weighting
+    loss_type = cfg.get('loss_type', 'cross_entropy')  # 'cross_entropy' or 'focal'
+    use_class_weights = cfg.get('use_class_weights', True)
+    class_weights = None
+    if use_class_weights:
+        class_weights = calculate_class_weights(cfg['train_csv'], cfg['label_col']).to(device)
+        if is_main_process(rank):
+            print(f"Using class weights for imbalanced dataset: {class_weights.tolist()}")
+    
+    criterion = build_criterion(loss_type=loss_type, class_weights=class_weights)
     optimizer = build_optimizer(model, lr=float(cfg['lr']), weight_decay=float(cfg['weight_decay']))
     
-    # Enable wandb model watching after model is created
+    # Cosine annealing LR scheduler for better convergence
+    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=int(cfg['epochs']), eta_min=1e-6)
+    
     if use_wandb:
         wandb.watch(model, criterion, log='all', log_freq=100)
-        print(f"Model watching enabled - tracking gradients and parameters")
+        if is_main_process(rank):
+            print(f"Model watching enabled - tracking gradients and parameters")
 
     best_key = cfg.get('save_best_by', 'auc')
     if best_key not in ('auc', 'acc'):
@@ -472,191 +601,246 @@ def train_phase1(config: Dict[str, Any]):
     best_metrics = {}
     history = []
     start_epoch = 0
+    patience_counter = 0
+    early_stop_patience = cfg.get('early_stop_patience', cfg.get('early_stopping_patience', 10))  # Early stopping
     
-    # Check for checkpoint to resume from
-    if resume_training and checkpoint_path.exists():
+    # Check for checkpoint to resume from (main process only loads)
+    if resume_training and checkpoint_path.exists() and is_main_process(rank):
         print(f"Found checkpoint at {checkpoint_path}, resuming training...")
         try:
             checkpoint = torch.load(checkpoint_path, map_location=device)
-            model.load_state_dict(checkpoint['model_state_dict'])
+            # Load model state (unwrap DDP if needed)
+            model_state = checkpoint['model_state_dict']
+            if use_ddp:
+                model.module.load_state_dict(model_state)
+            else:
+                model.load_state_dict(model_state)
             optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+            if 'scheduler_state_dict' in checkpoint:
+                scheduler.load_state_dict(checkpoint['scheduler_state_dict'])
             start_epoch = checkpoint['epoch'] + 1
             best_score = checkpoint['best_score']
             best_metrics = checkpoint.get('best_metrics', {})
             history = checkpoint.get('history', [])
+            patience_counter = checkpoint.get('patience_counter', 0)
             
             print(f"Resumed from epoch {checkpoint['epoch']}")
             print(f"Best {best_key} so far: {best_score:.4f}")
+            if use_ddp:
+                torch.distributed.barrier()
+                broadcast_model_parameters(model)
         except Exception as e:
             print(f"Warning: Failed to load checkpoint: {e}")
             print("Starting training from scratch...")
             start_epoch = 0
-    else:
+    elif is_main_process(rank):
         if resume_training:
             print("No checkpoint found, starting training from scratch...")
         else:
             print("Resume disabled, starting training from scratch...")
     
-    # Get gradient accumulation steps
+    # Broadcast start_epoch to all processes in DDP
+    if use_ddp:
+        start_epoch_tensor = torch.tensor(start_epoch, device=device)
+        torch.distributed.broadcast(start_epoch_tensor, src=0)
+        start_epoch = start_epoch_tensor.item()
+        if not (resume_training and checkpoint_path.exists()):
+            broadcast_model_parameters(model)
+    
     accumulation_steps = int(cfg.get('accumulation_steps', 1))
     use_amp = cfg.get('use_amp', True) and torch.cuda.is_available()
     
-    if accumulation_steps > 1:
-        print(f"Using gradient accumulation with {accumulation_steps} steps (effective batch size: {int(cfg['batch_size']) * accumulation_steps})")
-    if use_amp:
-        print("Using mixed precision training (FP16) for memory efficiency")
+    if is_main_process(rank):
+        if accumulation_steps > 1:
+            print(f"Using gradient accumulation with {accumulation_steps} steps (effective batch size: {int(cfg['batch_size']) * accumulation_steps})")
+        if use_amp:
+            print("Using mixed precision training (FP16) for memory efficiency")
 
     start_time = time.time()
     epochs = int(cfg['epochs'])
-    
-    # Track global training steps for batch-level logging
     global_step = 0
     
-    # Main training loop with overall progress bar
-    epoch_pbar = tqdm(range(start_epoch, epochs), desc="Training Progress", initial=start_epoch, total=epochs)
+    # Set sampler epoch for DDP (ensures different shuffle each epoch)
+    if use_ddp and train_sampler is not None:
+        train_sampler.set_epoch(start_epoch)
+    
+    epoch_pbar = tqdm(range(start_epoch, epochs), desc="Training Progress", initial=start_epoch, total=epochs, disable=not is_main_process(rank))
     
     for epoch in epoch_pbar:
+        # Set epoch for distributed sampler
+        if use_ddp and train_sampler is not None:
+            train_sampler.set_epoch(epoch)
+        
         t0 = time.time()
-        train_log = train_one_epoch(model, train_loader, criterion, optimizer, device, accumulation_steps, use_amp, epoch=epoch+1, log_wandb=use_wandb, global_step=global_step)
-        global_step = train_log.get('global_step', global_step)  # Update global step
-        val_log = evaluate(model, val_loader, criterion, device, use_amp, epoch=epoch+1)
+        train_log = train_one_epoch(model, train_loader, criterion, optimizer, device, rank, accumulation_steps, use_amp, epoch=epoch+1, log_wandb=use_wandb, global_step=global_step)
+        global_step = train_log.get('global_step', global_step)
+        val_log = evaluate(model, val_loader, criterion, device, rank, use_amp, epoch=epoch+1)
         history.append({'train': {k: v for k, v in train_log.items() if k != 'global_step'}, 'val': {k: val_log[k] for k in ['loss', 'auc', 'acc']}})
 
-        # Log to TensorBoard
-        writer.add_scalar('Loss/train', train_log['loss'], epoch)
-        writer.add_scalar('Loss/val', val_log['loss'], epoch)
-        writer.add_scalar('AUC/train', train_log['auc'], epoch)
-        writer.add_scalar('AUC/val', val_log['auc'], epoch)
-        writer.add_scalar('Accuracy/train', train_log['acc'], epoch)
-        writer.add_scalar('Accuracy/val', val_log['acc'], epoch)
-        writer.add_scalar('Learning_Rate', optimizer.param_groups[0]['lr'], epoch)
+        # Step LR scheduler
+        scheduler.step()
         
-        # Log to Weights & Biases
-        if use_wandb:
-            wandb_log = {
-                'epoch': epoch + 1,
-                'train/loss': train_log['loss'],
-                'train/auc': train_log['auc'],
-                'train/accuracy': train_log['acc'],
-                'val/loss': val_log['loss'],
-                'val/auc': val_log['auc'],
-                'val/accuracy': val_log['acc'],
-                'learning_rate': optimizer.param_groups[0]['lr'],
-            }
-            # Add GPU memory usage if available
-            if torch.cuda.is_available():
-                wandb_log['gpu/memory_allocated_gb'] = torch.cuda.memory_allocated() / 1024**3
-                wandb_log['gpu/memory_reserved_gb'] = torch.cuda.memory_reserved() / 1024**3
-                wandb_log['gpu/max_memory_allocated_gb'] = torch.cuda.max_memory_allocated() / 1024**3
-            wandb.log(wandb_log)
+        # Logging (main process only)
+        if is_main_process(rank):
+            writer.add_scalar('Loss/train', train_log['loss'], epoch)
+            writer.add_scalar('Loss/val', val_log['loss'], epoch)
+            writer.add_scalar('AUC/train', train_log['auc'], epoch)
+            writer.add_scalar('AUC/val', val_log['auc'], epoch)
+            writer.add_scalar('Accuracy/train', train_log['acc'], epoch)
+            writer.add_scalar('Accuracy/val', val_log['acc'], epoch)
+            writer.add_scalar('Learning_Rate', optimizer.param_groups[0]['lr'], epoch)
+            
+            if use_wandb:
+                wandb_log = {
+                    'epoch': epoch + 1,
+                    'train/loss': train_log['loss'],
+                    'train/auc': train_log['auc'],
+                    'train/accuracy': train_log['acc'],
+                    'val/loss': val_log['loss'],
+                    'val/auc': val_log['auc'],
+                    'val/accuracy': val_log['acc'],
+                    'learning_rate': optimizer.param_groups[0]['lr'],
+                }
+                if torch.cuda.is_available():
+                    wandb_log['gpu/memory_allocated_gb'] = torch.cuda.memory_allocated() / 1024**3
+                    wandb_log['gpu/memory_reserved_gb'] = torch.cuda.memory_reserved() / 1024**3
+                    wandb_log['gpu/max_memory_allocated_gb'] = torch.cuda.max_memory_allocated() / 1024**3
+                wandb.log(wandb_log)
 
+        # Check improvement and early stopping
         cur_score = val_log.get(best_key, float('-inf'))
         improved = np.isfinite(cur_score) and cur_score > best_score
         if improved:
             best_score = cur_score
+            patience_counter = 0
             best_metrics = {
                 'epoch': epoch,
                 'score_key': best_key,
                 'score': float(best_score),
                 'val': {k: float(val_log[k]) if isinstance(val_log[k], (int, float, np.floating)) else None for k in ['loss', 'auc', 'acc']}
             }
-            torch.save(model.state_dict(), models_dir / 'model_phase1.pth')
-            
-            # Log best metrics to wandb
-            if use_wandb:
-                wandb.run.summary['best_epoch'] = epoch
-                wandb.run.summary['best_val_auc'] = float(val_log['auc'])
-                wandb.run.summary['best_val_acc'] = float(val_log['acc'])
-                wandb.run.summary['best_val_loss'] = float(val_log['loss'])
+            # Save best model (main process only)
+            if is_main_process(rank):
+                model_state = model.module.state_dict() if use_ddp else model.state_dict()
+                torch.save(model_state, models_dir / 'model_phase1.pth')
+                if use_wandb:
+                    wandb.run.summary['best_epoch'] = epoch
+                    wandb.run.summary['best_val_auc'] = float(val_log['auc'])
+                    wandb.run.summary['best_val_acc'] = float(val_log['acc'])
+                    wandb.run.summary['best_val_loss'] = float(val_log['loss'])
+                    wandb.run.summary['best_val_opt_threshold'] = float(val_log.get('opt_threshold', 0.5))
+                    if 'report_opt' in val_log and isinstance(val_log['report_opt'], dict):
+                        her2_pos_metrics = val_log['report_opt'].get('HER2+', {})
+                        wandb.run.summary['best_val_pos_precision'] = her2_pos_metrics.get('precision')
+                        wandb.run.summary['best_val_pos_recall'] = her2_pos_metrics.get('recall')
+                        wandb.run.summary['best_val_pos_f1'] = her2_pos_metrics.get('f1-score')
+        else:
+            patience_counter += 1
         
         dur = time.time() - t0
         
-        # Update epoch progress bar with current metrics
-        epoch_pbar.set_postfix({
-            'train_auc': f'{train_log["auc"]:.4f}',
-            'val_auc': f'{val_log["auc"]:.4f}',
-            'best': '*' if improved else ''
-        })
+        # Update progress and print summary (main process only)
+        if is_main_process(rank):
+            epoch_pbar.set_postfix({
+                'train_auc': f'{train_log["auc"]:.4f}',
+                'val_auc': f'{val_log["auc"]:.4f}',
+                'best': '*' if improved else ''
+            })
+            tqdm.write(
+                f"Epoch {epoch+1}/{epochs} | "
+                f"train: loss={train_log['loss']:.4f} auc={train_log['auc']:.4f} acc={train_log['acc']:.4f} | "
+                f"val: loss={val_log['loss']:.4f} auc={val_log['auc']:.4f} acc={val_log['acc']:.4f} | "
+                f"LR: {optimizer.param_groups[0]['lr']:.2e} | "
+                f"{'*' if improved else ''} ({dur:.1f}s)"
+            )
         
-        # Print detailed epoch summary
-        tqdm.write(
-            f"Epoch {epoch+1}/{epochs} | "
-            f"train: loss={train_log['loss']:.4f} auc={train_log['auc']:.4f} acc={train_log['acc']:.4f} | "
-            f"val: loss={val_log['loss']:.4f} auc={val_log['auc']:.4f} acc={val_log['acc']:.4f} | "
-            f"{'*' if improved else ''} ({dur:.1f}s)"
-        )
+        # Save checkpoint (main process only)
+        if is_main_process(rank):
+            model_state = model.module.state_dict() if use_ddp else model.state_dict()
+            checkpoint = {
+                'epoch': epoch,
+                'model_state_dict': model_state,
+                'optimizer_state_dict': optimizer.state_dict(),
+                'scheduler_state_dict': scheduler.state_dict(),
+                'best_score': best_score,
+                'best_metrics': best_metrics,
+                'history': history,
+                'patience_counter': patience_counter,
+                'config': cfg,
+                'wandb_id': wandb_id if use_wandb else None,
+            }
+            torch.save(checkpoint, models_dir / 'checkpoint_last.pth')
+            
+            if (epoch + 1) % 5 == 0:
+                torch.save(checkpoint, models_dir / f'checkpoint_epoch_{epoch}.pth')
+                tqdm.write(f"Saved checkpoint at epoch {epoch}")
         
-        # Save checkpoint after each epoch
-        checkpoint = {
-            'epoch': epoch,
-            'model_state_dict': model.state_dict(),
-            'optimizer_state_dict': optimizer.state_dict(),
-            'best_score': best_score,
-            'best_metrics': best_metrics,
-            'history': history,
-            'config': cfg,
-            'wandb_id': wandb_id if use_wandb else None,
-        }
-        torch.save(checkpoint, models_dir / 'checkpoint_last.pth')
+        # Early stopping check
+        if patience_counter >= early_stop_patience:
+            if is_main_process(rank):
+                tqdm.write(f"\nEarly stopping triggered after {patience_counter} epochs without improvement")
+            break
         
-        # Save periodic checkpoints every 5 epochs
-        if (epoch + 1) % 5 == 0:
-            torch.save(checkpoint, models_dir / f'checkpoint_epoch_{epoch}.pth')
-            tqdm.write(f"Saved checkpoint at epoch {epoch}")
-        
-        # Clean up after each epoch to prevent memory accumulation
+        # Memory cleanup
         gc.collect()
-        torch.cuda.empty_cache()
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
     
     epoch_pbar.close()
     
-    # Close TensorBoard writer
-    writer.close()
+    if is_main_process(rank) and writer is not None:
+        writer.close()
 
-    # Save logs, confusion matrix, and report for final val run
-    save_metrics_csv_json(history, best_metrics, logs_dir)
-    # Use last validation metrics to write detailed CSVs
-    try:
-        cm = val_log['cm']
-        rep = val_log['report']
-        pd.DataFrame(cm, index=['HER2-', 'HER2+'], columns=['Pred -', 'Pred +']).to_csv(logs_dir / 'confusion_matrix.csv')
-        pd.DataFrame(rep).to_csv(logs_dir / 'classification_report.csv')
-        
-        # Log confusion matrix to wandb
-        if use_wandb:
-            # Create wandb confusion matrix
-            wandb.log({
-                "conf_mat": wandb.plot.confusion_matrix(
-                    probs=None,
-                    y_true=val_log['targets'],
-                    preds=(np.array(val_log['probs']) >= 0.5).astype(int),
-                    class_names=['HER2-', 'HER2+']
-                )
-            })
-            # Log classification report as table
-            report_df = pd.DataFrame(rep).transpose()
-            wandb.log({"classification_report": wandb.Table(dataframe=report_df)})
-    except Exception as e:
-        print(f"Warning: Failed to log final metrics: {e}")
+    # Save logs and final metrics (main process only)
+    if is_main_process(rank):
+        save_metrics_csv_json(history, best_metrics, logs_dir)
+        try:
+            cm = val_log['cm']
+            rep = val_log['report']
+            pd.DataFrame(cm, index=['HER2-', 'HER2+'], columns=['Pred -', 'Pred +']).to_csv(logs_dir / 'confusion_matrix.csv')
+            pd.DataFrame(rep).to_csv(logs_dir / 'classification_report.csv')
+            
+            if use_wandb:
+                wandb.log({
+                    "conf_mat": wandb.plot.confusion_matrix(
+                        probs=None,
+                        y_true=val_log['targets'],
+                        preds=(np.array(val_log['probs']) >= 0.5).astype(int),
+                        class_names=['HER2-', 'HER2+']
+                    )
+                })
+                report_df = pd.DataFrame(rep).transpose()
+                wandb.log({"classification_report": wandb.Table(dataframe=report_df)})
+        except Exception as e:
+            print(f"Warning: Failed to log final metrics: {e}")
     
-    # Close wandb
-    if use_wandb:
+    # Close wandb (main process only)
+    if use_wandb and is_main_process(rank):
         wandb.finish()
         print("Weights & Biases run finished")
+    
+    # Cleanup DDP
+    if use_ddp:
+        cleanup_distributed()
+        if is_main_process(rank):
+            print("Distributed training cleanup complete")
 
-    best_model_path = models_dir / 'model_phase1.pth'
-    print('Best model saved at:', best_model_path)
-    print('Training finished in', f"{(time.time()-start_time)/60:.1f} min")
-    print(f'TensorBoard logs saved to: {tb_dir}')
-    print(f'To view: tensorboard --logdir={tb_dir}')
-    if use_wandb:
-        print(f'Weights & Biases dashboard: {wandb.run.url}')
+    # Print summary (main process only)
+    if is_main_process(rank):
+        best_model_path = models_dir / 'model_phase1.pth'
+        print('Best model saved at:', best_model_path)
+        print('Training finished in', f"{(time.time()-start_time)/60:.1f} min")
+        print(f'TensorBoard logs saved to: {tb_dir}')
+        print(f'To view: tensorboard --logdir={tb_dir}')
+        if use_wandb:
+            print(f'Weights & Biases dashboard: {wandb.run.url}')
+        print(f'\nBest {best_key}: {best_score:.4f} at epoch {best_metrics.get("epoch", -1)}')
 
     return {
-        'best_model_path': str(best_model_path),
+        'best_model_path': str(models_dir / 'model_phase1.pth'),
         'best_metrics': best_metrics,
         'logs_dir': str(logs_dir),
         'models_dir': str(models_dir),
         'tb_dir': str(tb_dir),
-        'wandb_url': wandb.run.url if use_wandb else None,
+        'wandb_url': wandb.run.url if use_wandb and is_main_process(rank) else None,
     }
