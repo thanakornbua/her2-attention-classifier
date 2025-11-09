@@ -7,7 +7,7 @@ Usage:
     results = train_phase1(config)
     
     # Multi-GPU DDP (recommended)
-    torchrun --nproc_per_node=2 launch_train_phase1.py --config configs/config.yaml
+    torchrun --nproc_per_node=2 -m src.train.train_phase1 --config configs/config.yaml
 
 Expected config keys (with defaults):
     - train_csv: str, path to training CSV with columns [path, label]
@@ -985,3 +985,20 @@ def train_phase1(config: Dict[str, Any]):
         'tb_dir': str(tb_dir),
         'wandb_url': wandb.run.url if use_wandb and is_main_process(rank) else None,
     }
+
+
+if __name__ == "__main__":
+    import argparse, yaml
+    parser = argparse.ArgumentParser(description="Phase 1 HER2 patch-level training")
+    parser.add_argument("--config", type=str, required=True, help="Path to YAML config file")
+    parser.add_argument("--loss-type", type=str, default=None, help="Override loss_type (focal|cross_entropy)")
+    parser.add_argument("--use-class-weights", type=str, default=None, help="Override use_class_weights (true|false)")
+    args = parser.parse_args()
+    with open(args.config, 'r') as f:
+        user_cfg = yaml.safe_load(f)
+    if args.loss_type:
+        user_cfg['loss_type'] = args.loss_type
+    if args.use_class_weights:
+        user_cfg['use_class_weights'] = args.use_class_weights.lower() in ("true","1","yes")
+    out = train_phase1(user_cfg)
+    print("Training complete. Best model:", out['best_model_path'])

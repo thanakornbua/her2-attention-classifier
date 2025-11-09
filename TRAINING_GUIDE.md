@@ -18,17 +18,17 @@
 
 ### Single GPU
 ```bash
-python launch_train_phase1.py --config configs/config.yaml
+python -m src.train.train_phase1 --config configs/config.yaml
 ```
 
 ### Multi-GPU (2 GPUs)
 ```bash
-torchrun --nproc_per_node=2 launch_train_phase1.py --config configs/config.yaml
+torchrun --nproc_per_node=2 -m src.train.train_phase1 --config configs/config.yaml
 ```
 
-### Medical-Grade (Focal Loss for AUC ≥ 0.95)
+### Medical-Grade (Focal Loss + Class Weights)
 ```bash
-torchrun --nproc_per_node=2 launch_train_phase1.py --config configs/config.yaml --focal-loss
+torchrun --nproc_per_node=2 -m src.train.train_phase1 --config configs/config.yaml --loss-type focal --use-class-weights true
 ```
 
 ## Config for Medical-Grade
@@ -70,7 +70,7 @@ cat outputs/phase1/logs/best.json
 | DDP acceleration | `setup_distributed()`, `DDP(model, device_ids=[local_rank])`, DistributedSampler |
 | Proper data sharding | `DistributedSampler` for train/val, `set_epoch(epoch)` each loop |
 | Inter-process sync | Parameter broadcast after resume & fresh init (`broadcast_model_parameters`), loss all_reduce, prediction all_gather |
-| Benchmarking | `train_phase1_benchmark.py` with time, AUC progression, GPU util, markdown summary |
+| Benchmarking | (Removed optional script for minimal repo; integrate manually if needed) |
 | Reproducibility | `set_seed()` seeds Python, NumPy, Torch + cudnn deterministic settings; worker_init_fn seeds each DataLoader worker |
 | Checkpoint robustness | Rank 0 only saves; resume loads + broadcasts to other ranks |
 | Config toggles | Flags: `use_ddp`, `use_amp`, `accumulation_steps`, `loss_type`, `use_class_weights`, `early_stop_patience` |
