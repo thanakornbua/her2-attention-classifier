@@ -7,7 +7,7 @@ Usage:
     results = train_phase1(config)
     
     # Multi-GPU DDP (recommended)
-    torchrun --nproc_per_node=2 -m src.train.train_phase1_ddp --config config.yaml
+    torchrun --nproc_per_node=2 launch_train_phase1.py --config configs/config.yaml
 
 Expected config keys (with defaults):
     - train_csv: str, path to training CSV with columns [path, label]
@@ -38,7 +38,7 @@ import json
 import time
 import random
 from pathlib import Path
-from typing import Dict, Any, Optional
+from typing import Dict, Any
 
 import numpy as np
 import pandas as pd
@@ -183,8 +183,7 @@ def build_resnet50(pretrained: bool = True, num_classes: int = 2):
         model = models.resnet50(pretrained=pretrained)
     in_feat = model.fc.in_features
     model.fc = nn.Linear(in_feat, num_classes)
-    last_conv = 'layer4'
-    return model, last_conv
+    return model
 
 
 def build_optimizer(model, lr=1e-4, weight_decay=1e-4):
@@ -253,7 +252,7 @@ def broadcast_model_parameters(model):
         torch.distributed.broadcast(b.data, src=0)
 
 
-def train_one_epoch(model, loader, criterion, optimizer, device, rank=0, accumulation_steps=1, use_amp=True, epoch=None, log_wandb=False, global_step=None, grad_clip_norm: float = 0.0):
+def train_one_epoch(model, loader, criterion, optimizer, device, rank=0, accumulation_steps=1, use_amp=True, epoch=None, log_wandb=False, global_step=None, grad_clip_norm: float = 0.0, scaler: GradScaler | None = None):
     """Optimized training loop with DDP support."""
     model.train()
     running_loss = 0.0
@@ -261,7 +260,7 @@ def train_one_epoch(model, loader, criterion, optimizer, device, rank=0, accumul
     all_targets, all_probs = [], []
     optimizer.zero_grad(set_to_none=True)
     
-    scaler = GradScaler(enabled=use_amp)
+    scaler = scaler or GradScaler(enabled=use_amp)
     desc = f"Epoch {epoch} [Train]" if epoch is not None else "Training"
     pbar = tqdm(enumerate(loader), total=len(loader), desc=desc, leave=False, disable=not is_main_process(rank))
     
@@ -442,14 +441,19 @@ def evaluate(model, loader, criterion, device, rank=0, use_amp=True, epoch=None)
     cls_report = classification_report(global_targets, preds, target_names=['HER2-', 'HER2+'], output_dict=True, zero_division=0) if np.isfinite(epoch_acc) else {}
     cls_report_opt = classification_report(global_targets, preds_opt, target_names=['HER2-', 'HER2+'], output_dict=True, zero_division=0) if np.isfinite(acc_opt) else {}
     
-    # Medical-grade metrics: Sensitivity and Specificity
-    # For HER2: Sensitivity (recall) = TP/(TP+FN), Specificity = TN/(TN+FP)
+    # Medical-grade metrics: Sensitivity and Specificity (standard and optimal threshold)
     sensitivity = float('nan')
     specificity = float('nan')
+    sensitivity_opt = float('nan')
+    specificity_opt = float('nan')
     if cm.sum() > 0 and np.isfinite(epoch_acc):
         tn, fp, fn, tp = cm.ravel()
         sensitivity = tp / (tp + fn) if (tp + fn) > 0 else 0.0
         specificity = tn / (tn + fp) if (tn + fp) > 0 else 0.0
+    if cm_opt.sum() > 0 and np.isfinite(acc_opt):
+        tn_o, fp_o, fn_o, tp_o = cm_opt.ravel()
+        sensitivity_opt = tp_o / (tp_o + fn_o) if (tp_o + fn_o) > 0 else 0.0
+        specificity_opt = tn_o / (tn_o + fp_o) if (tn_o + fp_o) > 0 else 0.0
     
     return {
         'loss': epoch_loss,
@@ -457,6 +461,8 @@ def evaluate(model, loader, criterion, device, rank=0, use_amp=True, epoch=None)
         'acc': epoch_acc,
         'sensitivity': sensitivity,  # True positive rate (recall for HER2+)
         'specificity': specificity,  # True negative rate
+        'sensitivity_opt': sensitivity_opt,
+        'specificity_opt': specificity_opt,
         'cm': cm,
         'cm_opt': cm_opt,
         'report': cls_report,
@@ -547,10 +553,9 @@ def train_phase1(config: Dict[str, Any]):
     out_dir = Path(cfg['output_dir'])
     models_dir = out_dir / 'models'
     logs_dir = out_dir / 'logs'
-    vis_dir = out_dir / 'gradcam'
     tb_dir = out_dir / 'tensorboard'
     if is_main_process(rank):
-        for d in [out_dir, models_dir, logs_dir, vis_dir, tb_dir]:
+        for d in [out_dir, models_dir, logs_dir, tb_dir]:
             d.mkdir(parents=True, exist_ok=True)
     
     # Initialize TensorBoard and W&B on main process only
@@ -618,27 +623,29 @@ def train_phase1(config: Dict[str, Any]):
         np.random.seed(seed)
         torch.manual_seed(seed)
 
-    train_loader = DataLoader(
-        train_set,
+    # Build DataLoader kwargs robustly to avoid invalid params when num_workers=0
+    common_loader_kwargs = dict(
         batch_size=int(cfg['batch_size']),
-        shuffle=(train_sampler is None),  # Only shuffle if not using DDP
-        sampler=train_sampler,
         num_workers=int(cfg['num_workers']),
         pin_memory=pin_mem,
-        prefetch_factor=prefetch_factor if int(cfg['num_workers']) > 0 else None,
-        persistent_workers=persistent_workers,
-        worker_init_fn=_worker_init_fn if int(cfg['num_workers']) > 0 else None,
+    )
+    if int(cfg['num_workers']) > 0:
+        common_loader_kwargs.update(
+            prefetch_factor=prefetch_factor,
+            persistent_workers=persistent_workers,
+            worker_init_fn=_worker_init_fn,
+        )
+    train_loader = DataLoader(
+        train_set,
+        shuffle=(train_sampler is None),
+        sampler=train_sampler,
+        **common_loader_kwargs,
     )
     val_loader = DataLoader(
         val_set,
-        batch_size=int(cfg['batch_size']),
         shuffle=False,
         sampler=val_sampler,
-        num_workers=int(cfg['num_workers']),
-        pin_memory=pin_mem,
-        prefetch_factor=prefetch_factor if int(cfg['num_workers']) > 0 else None,
-        persistent_workers=persistent_workers,
-        worker_init_fn=_worker_init_fn if int(cfg['num_workers']) > 0 else None,
+        **common_loader_kwargs,
     )
 
     # Model and optimizer
@@ -750,6 +757,8 @@ def train_phase1(config: Dict[str, Any]):
     start_time = time.time()
     epochs = int(cfg['epochs'])
     global_step = 0
+    # Persistent GradScaler across epochs for numerical stability
+    scaler = GradScaler(enabled=use_amp)
     
     # Set sampler epoch for DDP (ensures different shuffle each epoch)
     if use_ddp and train_sampler is not None:
@@ -775,7 +784,8 @@ def train_phase1(config: Dict[str, Any]):
             epoch=epoch+1,
             log_wandb=use_wandb,
             global_step=global_step,
-            grad_clip_norm=float(cfg.get('grad_clip_norm', 0.0))
+            grad_clip_norm=float(cfg.get('grad_clip_norm', 0.0)),
+            scaler=scaler,
         )
         global_step = train_log.get('global_step', global_step)
         val_log = evaluate(model, val_loader, criterion, device, rank, use_amp, epoch=epoch+1)
@@ -815,6 +825,10 @@ def train_phase1(config: Dict[str, Any]):
                     wandb_log['gpu/memory_allocated_gb'] = torch.cuda.memory_allocated() / 1024**3
                     wandb_log['gpu/memory_reserved_gb'] = torch.cuda.memory_reserved() / 1024**3
                     wandb_log['gpu/max_memory_allocated_gb'] = torch.cuda.max_memory_allocated() / 1024**3
+                # Add optimal-threshold clinical metrics if available
+                if 'sensitivity_opt' in val_log and np.isfinite(val_log['sensitivity_opt']):
+                    wandb_log['val/sensitivity_opt'] = val_log['sensitivity_opt']
+                    wandb_log['val/specificity_opt'] = val_log['specificity_opt']
                 wandb.log(wandb_log)
 
         # Check improvement and early stopping
@@ -858,6 +872,9 @@ def train_phase1(config: Dict[str, Any]):
                         wandb.run.summary['best_val_pos_precision'] = her2_pos_metrics.get('precision')
                         wandb.run.summary['best_val_pos_recall'] = her2_pos_metrics.get('recall')
                         wandb.run.summary['best_val_pos_f1'] = her2_pos_metrics.get('f1-score')
+                    if 'sensitivity_opt' in val_log and np.isfinite(val_log['sensitivity_opt']):
+                        wandb.run.summary['best_val_sensitivity_opt'] = float(val_log['sensitivity_opt'])
+                        wandb.run.summary['best_val_specificity_opt'] = float(val_log['specificity_opt'])
         else:
             patience_counter += 1
         
