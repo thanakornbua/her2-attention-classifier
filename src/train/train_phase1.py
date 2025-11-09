@@ -157,10 +157,9 @@ class PatchDataset(Dataset):
         row = self.df.iloc[idx]
         path = row[self.path_col]
         label = int(row[self.label_col])
-        with Image.open(path) as img:
-            img = img.convert('RGB')
-            if self.transform:
-                img = self.transform(img)
+        img = Image.open(path).convert('RGB')
+        if self.transform:
+            img = self.transform(img)
         return img, label, path
 def build_resnet50(pretrained: bool = True, num_classes: int = 2):
     """Build ResNet-50 with custom classification head."""
@@ -590,7 +589,16 @@ def train_phase1(config: Dict[str, Any]):
     if use_ddp:
         rank, world_size, local_rank = setup_distributed()
     
-    set_seed(int(cfg.get('seed', 42)))
+    # Extract commonly used config values once
+    input_size = int(cfg['input_size'])
+    batch_size = int(cfg['batch_size'])
+    num_workers = int(cfg['num_workers'])
+    epochs = int(cfg['epochs'])
+    lr = float(cfg['lr'])
+    weight_decay = float(cfg['weight_decay'])
+    seed = int(cfg.get('seed', 42))
+    
+    set_seed(seed)
     if torch.cuda.is_available():
         device = torch.device(f'cuda:{local_rank}')
     else:
@@ -613,7 +621,7 @@ def train_phase1(config: Dict[str, Any]):
     wandb_id = None
     if use_wandb:
         wandb_project = cfg.get('wandb_project', 'her2-classification')
-        wandb_name = cfg.get('wandb_name', f"phase1_bs{cfg['batch_size']}_size{cfg['input_size']}")
+        wandb_name = cfg.get('wandb_name', f"phase1_bs{batch_size}_size{input_size}")
         
         if resume_training and checkpoint_path.exists():
             try:
@@ -646,15 +654,6 @@ def train_phase1(config: Dict[str, Any]):
             print("Weights & Biases not available - install with: pip install wandb")
         else:
             print("Weights & Biases logging disabled")
-
-    # Extract commonly used config values once
-    input_size = int(cfg['input_size'])
-    batch_size = int(cfg['batch_size'])
-    num_workers = int(cfg['num_workers'])
-    epochs = int(cfg['epochs'])
-    lr = float(cfg['lr'])
-    weight_decay = float(cfg['weight_decay'])
-    seed = int(cfg.get('seed', 42))
     
     # Datasets and loaders
     enable_stain_norm = bool(cfg.get('enable_stain_norm', True))
