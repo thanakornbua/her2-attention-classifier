@@ -1,14 +1,18 @@
-# Phase 1 Training - Quick Guide
+# Phase 1 Training - Complete Guide
 
-## Features Added
-✅ **DDP Multi-GPU Support** - 2-4x faster training  
-✅ **Focal Loss** - Better for imbalanced data (target: AUC ≥ 0.95)  
-✅ **Auto Class Weighting** - Handles class imbalance  
+## 🎯 Target: AUC ≥ 0.95 for Medical-Grade HER2 Classification
+
+### Features Implemented
+✅ **DDP Multi-GPU** - 2-4x faster training  
+✅ **Mixed Precision (AMP)** - Memory efficient FP16  
+✅ **Focal Loss** - Handles severe class imbalance  
+✅ **Class Weighting** - Robust minority class handling  
+✅ **Sensitivity/Specificity** - Clinical metrics tracked  
+✅ **Optimal Threshold** - Youden's J for clinical decisions  
 ✅ **Early Stopping** - Prevents overfitting  
-✅ **Optimized Code** - 30% reduction, unified AMP handling  
-✅ **Global Metrics Under DDP** - AUC/ACC computed on full aggregated dataset  
-✅ **Optimal Threshold Estimation** - Youden's J for clinically tuned operating point  
-✅ **Per-Class Metrics** - HER2+ precision/recall/F1 logged when improved  
+✅ **Gradient Clipping** - Training stability  
+✅ **Stain Normalization** - Scanner robustness (optional)  
+✅ **PyTorch Compile** - 20-30% speedup (optional)  
 
 ## Quick Start
 
@@ -104,12 +108,82 @@ Running the benchmark script produces:
 - [ ] Benchmark artifacts archived
 
 
+## 🐛 Recent Bug Fixes (Critical for Medical Use)
+
+### Fixed Issues:
+1. ✅ **FocalLoss now supports class_weights** - Combines focal + weighting for extreme imbalance
+2. ✅ **Correct loss calculation** - Fixed progress bar averaging bug
+3. ✅ **Sensitivity/Specificity tracking** - Essential for clinical validation (target: sens ≥0.90)
+4. ✅ **Confusion matrix labels explicit** - Prevents silent class swapping
+5. ✅ **DDP barrier before broadcast** - Ensures multi-GPU reproducibility
+6. ✅ **Zero-division handling** - Robust on small validation sets
+
+### Medical Metrics Now Tracked:
+- **Sensitivity (Recall)**: True positive rate for HER2+ (target ≥0.90)
+- **Specificity**: True negative rate for HER2- (target ≥0.85)
+- **Optimal Threshold**: Youden's J maximizes sensitivity + specificity - 1
+- **Per-Class Metrics**: HER2+ precision/recall/F1 for minority class
+
+---
+
+## 📊 Expected Performance
+
+| Metric | Conservative | Target | Excellent |
+|--------|--------------|--------|-----------|
+| **AUC** | 0.92 | **0.95** | 0.97 |
+| **Sensitivity** | 0.85 | **0.90** | 0.93 |
+| **Specificity** | 0.80 | **0.85** | 0.90 |
+| **Accuracy** | 0.85 | 0.88 | 0.92 |
+
+---
+
+## ✅ Pre-Deployment Checklist
+
+### Model Performance
+- [ ] Validation AUC ≥ 0.95
+- [ ] Sensitivity ≥ 0.90 (HER2+ recall)
+- [ ] Specificity ≥ 0.85
+- [ ] External cohort tested (different hospital/scanner)
+
+### Reproducibility
+- [ ] Retrain with same seed → identical metrics (±0.001)
+- [ ] DDP training matches single-GPU (±0.002)
+- [ ] Document: PyTorch version, CUDA version, git commit hash
+
+### Clinical Validation
+- [ ] Confusion matrix reviewed for systematic errors
+- [ ] Failure cases analyzed with pathologists
+- [ ] Optimal threshold vs 0.5 compared
+- [ ] Decision curve analysis completed
+
+---
+
 ## Troubleshooting
 
 **Out of Memory?**
 ```yaml
 batch_size: 16              # Reduce this
 accumulation_steps: 4       # Increase this (effective batch = 16*4=64)
+enable_stain_norm: false    # Temporarily disable for testing (NOT for production)
+```
+
+**AUC < 0.85?**
+- Check label quality (review misclassified patches)
+- Verify stain normalization is enabled
+- Increase epochs (50-100 for convergence)
+- Try focal loss: `loss_type: 'focal'`
+
+**Low Sensitivity (<0.85)?**
+- Use focal loss (boosts minority class recall)
+- Enable class weighting
+- Adjust optimal threshold post-training
+- Review false negatives with pathologist
+
+**Training unstable?**
+```yaml
+grad_clip_norm: 1.0         # Add gradient clipping
+lr: 5e-5                    # Reduce learning rate
+accumulation_steps: 2       # Smooth gradients
 ```
 
 **Slow convergence?**
