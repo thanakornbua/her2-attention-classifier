@@ -143,15 +143,12 @@ class PatchDataset(Dataset):
     def __init__(self, csv_path: str, path_col: str, label_col: str, transform=None):
         self.df = pd.read_csv(csv_path)
         self.path_col = path_col
-        self.label_col = label_col
+        self.label_col = label_col if label_col in self.df.columns else 'target'
         self.transform = transform
         if self.path_col not in self.df.columns:
             raise ValueError(f"Missing column '{self.path_col}' in {csv_path}")
         if self.label_col not in self.df.columns:
-            if 'target' in self.df.columns:
-                self.label_col = 'target'
-            else:
-                raise ValueError(f"Missing label column in {csv_path}")
+            raise ValueError(f"Missing label column '{label_col}' or 'target' in {csv_path}")
 
     def __len__(self):
         return len(self.df)
@@ -160,29 +157,19 @@ class PatchDataset(Dataset):
         row = self.df.iloc[idx]
         path = row[self.path_col]
         label = int(row[self.label_col])
-        img = Image.open(path).convert('RGB')
-        # Apply transforms if needed
-        if self.transform:
-            try:
-                img_transformed = self.transform(img) # Might cause error here in case of if image was closed before tensor transformation concludes.
-                return img_transformed, label, path
-            finally:
-                try:
-                    img.close()
-                except (AttributeError, RuntimeError):
-                    # Image already closed or doesn't support close
-                    pass
+        with Image.open(path) as img:
+            img = img.convert('RGB')
+            if self.transform:
+                img = self.transform(img)
         return img, label, path
 def build_resnet50(pretrained: bool = True, num_classes: int = 2):
+    """Build ResNet-50 with custom classification head."""
     try:
-        # Newer torchvision API with Weights enums
         weights = models.ResNet50_Weights.IMAGENET1K_V2 if pretrained else None
         model = models.resnet50(weights=weights)
     except Exception:
-        # Fallback for older versions
         model = models.resnet50(pretrained=pretrained)
-    in_feat = model.fc.in_features
-    model.fc = nn.Linear(in_feat, num_classes)
+    model.fc = nn.Linear(model.fc.in_features, num_classes)
     return model
 
 
@@ -240,16 +227,33 @@ def build_criterion(loss_type: str = 'cross_entropy', class_weights=None):
 
 
 def broadcast_model_parameters(model):
-    """Broadcast parameters and buffers from rank 0 to all ranks.
-    Should be called after loading checkpoint on rank 0 or after fresh init.
-    """
+    """Broadcast parameters and buffers from rank 0 to all ranks."""
     if not torch.distributed.is_initialized():
         return
     module = model.module if isinstance(model, DDP) else model
-    for p in module.parameters():
-        torch.distributed.broadcast(p.data, src=0)
-    for b in module.buffers():
-        torch.distributed.broadcast(b.data, src=0)
+    for tensor in list(module.parameters()) + list(module.buffers()):
+        torch.distributed.broadcast(tensor.data, src=0)
+
+
+def aggregate_metrics_ddp(local_loss, local_count, all_targets, all_probs, device):
+    """Aggregate metrics across DDP processes."""
+    if torch.distributed.is_initialized():
+        loss_sum = torch.tensor(local_loss, device=device)
+        count_sum = torch.tensor(local_count, device=device, dtype=torch.long)
+        torch.distributed.all_reduce(loss_sum, op=torch.distributed.ReduceOp.SUM)
+        torch.distributed.all_reduce(count_sum, op=torch.distributed.ReduceOp.SUM)
+        epoch_loss = (loss_sum / count_sum.clamp(min=1)).item()
+        
+        gathered_targets = [None] * torch.distributed.get_world_size()
+        gathered_probs = [None] * torch.distributed.get_world_size()
+        torch.distributed.all_gather_object(gathered_targets, all_targets)
+        torch.distributed.all_gather_object(gathered_probs, all_probs)
+        all_targets = [x for sub in gathered_targets for x in sub]
+        all_probs = [x for sub in gathered_probs for x in sub]
+    else:
+        epoch_loss = local_loss / max(local_count, 1)
+    
+    return epoch_loss, all_targets, all_probs
 
 
 def train_one_epoch(model, loader, criterion, optimizer, device, rank=0, accumulation_steps=1, use_amp=True, epoch=None, log_wandb=False, global_step=None, grad_clip_norm: float = 0.0, scaler: GradScaler | None = None):
@@ -318,31 +322,18 @@ def train_one_epoch(model, loader, criterion, optimizer, device, rank=0, accumul
         scaler.update()
         optimizer.zero_grad(set_to_none=True)
     
-    # Aggregate metrics across all processes in DDP
-    if torch.distributed.is_initialized():
-        loss_sum = torch.tensor(running_loss, device=device)
-        count_sum = torch.tensor(sample_count, device=device, dtype=torch.long)
-        torch.distributed.all_reduce(loss_sum, op=torch.distributed.ReduceOp.SUM)
-        torch.distributed.all_reduce(count_sum, op=torch.distributed.ReduceOp.SUM)
-        epoch_loss = (loss_sum / count_sum.clamp(min=1)).item()
-    else:
-        epoch_loss = running_loss / max(sample_count, 1)
+    # Aggregate metrics
+    epoch_loss, global_targets, global_probs = aggregate_metrics_ddp(
+        running_loss, sample_count, all_targets, all_probs, device
+    )
     
-    # Gather predictions for global train metrics
-    global_targets, global_probs = all_targets, all_probs
-    if torch.distributed.is_initialized():
-        gathered_t, gathered_p = [None]*torch.distributed.get_world_size(), [None]*torch.distributed.get_world_size()
-        torch.distributed.all_gather_object(gathered_t, all_targets)
-        torch.distributed.all_gather_object(gathered_p, all_probs)
-        global_targets = [x for sub in gathered_t for x in sub]
-        global_probs = [x for sub in gathered_p for x in sub]
-
     try:
         epoch_auc = roc_auc_score(global_targets, global_probs)
+        preds = (np.array(global_probs) >= 0.5).astype(int)
+        epoch_acc = accuracy_score(global_targets, preds)
     except Exception:
         epoch_auc = float('nan')
-    preds = (np.array(global_probs) >= 0.5).astype(int)
-    epoch_acc = accuracy_score(global_targets, preds) if len(global_targets)==len(preds) and len(preds)>0 else float('nan')
+        epoch_acc = float('nan')
     
     return {'loss': epoch_loss, 'auc': epoch_auc, 'acc': epoch_acc, 'global_step': global_step + len(loader)}
 
@@ -377,25 +368,10 @@ def evaluate(model, loader, criterion, device, rank=0, use_amp=True, epoch=None)
                 pbar.set_postfix({'loss': f'{avg_loss:.4f}'})
     pbar.close()
     
-    # Aggregate loss across DDP processes
-    if torch.distributed.is_initialized():
-        loss_sum = torch.tensor(running_loss, device=device)
-        count_sum = torch.tensor(sample_count, device=device, dtype=torch.long)
-        torch.distributed.all_reduce(loss_sum, op=torch.distributed.ReduceOp.SUM)
-        torch.distributed.all_reduce(count_sum, op=torch.distributed.ReduceOp.SUM)
-        epoch_loss = (loss_sum / count_sum.clamp(min=1)).item()
-    else:
-        epoch_loss = running_loss / max(sample_count, 1)
-    
-    # Gather predictions/targets from all ranks for correct global AUC
-    global_targets, global_probs = all_targets, all_probs
-    if torch.distributed.is_initialized():
-        gathered_targets, gathered_probs = [None] * torch.distributed.get_world_size(), [None] * torch.distributed.get_world_size()
-        torch.distributed.all_gather_object(gathered_targets, all_targets)
-        torch.distributed.all_gather_object(gathered_probs, all_probs)
-        # Flatten lists
-        global_targets = [t for sub in gathered_targets for t in sub]
-        global_probs = [p for sub in gathered_probs for p in sub]
+    # Aggregate metrics
+    epoch_loss, global_targets, global_probs = aggregate_metrics_ddp(
+        running_loss, sample_count, all_targets, all_probs, device
+    )
     
     # Compute metrics (on rank 0 for reporting)
     # Compute optimal threshold (Youden's J)
@@ -474,16 +450,87 @@ def evaluate(model, loader, criterion, device, rank=0, use_amp=True, epoch=None)
 
 
 def save_metrics_csv_json(history, best_metrics, logs_dir: Path):
-    rows = []
-    for e, rec in enumerate(history):
-        row = {'epoch': e}
-        row.update({f'train_{k}': rec['train'][k] for k in ['loss', 'auc', 'acc']})
-        row.update({f'val_{k}': rec['val'][k] for k in ['loss', 'auc', 'acc']})
-        rows.append(row)
-    df = pd.DataFrame(rows)
-    df.to_csv(logs_dir / 'metrics.csv', index=False)
-    with open(logs_dir / 'best.json', 'w') as f:
-        json.dump(best_metrics, f, indent=2)
+    """Save training history and best metrics to disk."""
+    rows = [
+        {'epoch': e, **{f'train_{k}': rec['train'][k] for k in ['loss', 'auc', 'acc']},
+         **{f'val_{k}': rec['val'][k] for k in ['loss', 'auc', 'acc']}}
+        for e, rec in enumerate(history)
+    ]
+    pd.DataFrame(rows).to_csv(logs_dir / 'metrics.csv', index=False)
+    (logs_dir / 'best.json').write_text(json.dumps(best_metrics, indent=2))
+
+
+def save_checkpoint(epoch, model, optimizer, scheduler, best_score, best_metrics, history, 
+                    patience_counter, cfg, wandb_id, checkpoint_path, use_ddp):
+    """Save training checkpoint."""
+    model_state = model.module.state_dict() if use_ddp else model.state_dict()
+    torch.save({
+        'epoch': epoch,
+        'model_state_dict': model_state,
+        'optimizer_state_dict': optimizer.state_dict(),
+        'scheduler_state_dict': scheduler.state_dict(),
+        'best_score': best_score,
+        'best_metrics': best_metrics,
+        'history': history,
+        'patience_counter': patience_counter,
+        'config': cfg,
+        'wandb_id': wandb_id,
+    }, checkpoint_path)
+
+
+def log_wandb_epoch(train_log, val_log, epoch, optimizer, use_wandb):
+    """Log epoch metrics to Weights & Biases."""
+    if not use_wandb:
+        return
+    
+    wandb_log = {
+        'epoch': epoch + 1,
+        'train/loss': train_log['loss'],
+        'train/auc': train_log['auc'],
+        'train/accuracy': train_log['acc'],
+        'val/loss': val_log['loss'],
+        'val/auc': val_log['auc'],
+        'val/accuracy': val_log['acc'],
+        'learning_rate': optimizer.param_groups[0]['lr'],
+    }
+    
+    # Medical metrics
+    for metric in ['sensitivity', 'specificity', 'opt_threshold', 'sensitivity_opt', 'specificity_opt']:
+        if metric in val_log and np.isfinite(val_log[metric]):
+            wandb_log[f'val/{metric}'] = val_log[metric]
+    
+    # GPU metrics
+    if torch.cuda.is_available():
+        wandb_log.update({
+            'gpu/memory_allocated_gb': torch.cuda.memory_allocated() / 1024**3,
+            'gpu/memory_reserved_gb': torch.cuda.memory_reserved() / 1024**3,
+            'gpu/max_memory_allocated_gb': torch.cuda.max_memory_allocated() / 1024**3,
+        })
+    
+    wandb.log(wandb_log)
+
+
+def update_wandb_best_summary(val_log, epoch):
+    """Update W&B run summary with best metrics."""
+    wandb.run.summary.update({
+        'best_epoch': epoch,
+        'best_val_auc': float(val_log['auc']),
+        'best_val_acc': float(val_log['acc']),
+        'best_val_loss': float(val_log['loss']),
+        'best_val_opt_threshold': float(val_log.get('opt_threshold', 0.5)),
+    })
+    
+    # Medical metrics
+    for metric in ['sensitivity', 'specificity', 'sensitivity_opt', 'specificity_opt']:
+        if metric in val_log and np.isfinite(val_log[metric]):
+            wandb.run.summary[f'best_val_{metric}'] = float(val_log[metric])
+    
+    # Per-class metrics from optimal threshold report
+    if 'report_opt' in val_log and isinstance(val_log['report_opt'], dict):
+        her2_pos = val_log['report_opt'].get('HER2+', {})
+        for k in ['precision', 'recall', 'f1-score']:
+            if k in her2_pos:
+                wandb.run.summary[f'best_val_pos_{k.replace("-", "_")}'] = her2_pos[k]
 
 
 def _with_defaults(user_cfg: Dict[str, Any]) -> Dict[str, Any]:
@@ -623,53 +670,44 @@ def train_phase1(config: Dict[str, Any]):
         np.random.seed(seed)
         torch.manual_seed(seed)
 
-    # Build DataLoader kwargs robustly to avoid invalid params when num_workers=0
-    common_loader_kwargs = dict(
-        batch_size=int(cfg['batch_size']),
-        num_workers=int(cfg['num_workers']),
-        pin_memory=pin_mem,
-    )
-    if int(cfg['num_workers']) > 0:
-        common_loader_kwargs.update(
-            prefetch_factor=prefetch_factor,
-            persistent_workers=persistent_workers,
-            worker_init_fn=_worker_init_fn,
-        )
-    train_loader = DataLoader(
-        train_set,
-        shuffle=(train_sampler is None),
-        sampler=train_sampler,
-        **common_loader_kwargs,
-    )
-    val_loader = DataLoader(
-        val_set,
-        shuffle=False,
-        sampler=val_sampler,
-        **common_loader_kwargs,
-    )
+    # Build DataLoader kwargs
+    num_workers = int(cfg['num_workers'])
+    loader_kwargs = {
+        'batch_size': int(cfg['batch_size']),
+        'num_workers': num_workers,
+        'pin_memory': pin_mem,
+        **(
+            {
+                'prefetch_factor': prefetch_factor,
+                'persistent_workers': persistent_workers,
+                'worker_init_fn': _worker_init_fn,
+            }
+            if num_workers > 0
+            else {}
+        ),
+    }
+    train_loader = DataLoader(train_set, shuffle=(train_sampler is None), sampler=train_sampler, **loader_kwargs)
+    val_loader = DataLoader(val_set, shuffle=False, sampler=val_sampler, **loader_kwargs)
 
-    # Model and optimizer
-    model, last_conv = build_resnet50(cfg.get('pretrained', True))
-    model = model.to(device)
-    # Optional PyTorch 2.x compile for speed
-    if bool(cfg.get('use_compile', False)) and hasattr(torch, 'compile'):
+    # Model initialization
+    model = build_resnet50(cfg.get('pretrained', True)).to(device)
+    
+    # Optional torch.compile for speed (PyTorch 2.x)
+    if cfg.get('use_compile', False) and hasattr(torch, 'compile'):
         try:
-            compile_mode = cfg.get('compile_mode', 'default')
-            model = torch.compile(model, mode=compile_mode)
+            model = torch.compile(model, mode=cfg.get('compile_mode', 'default'))
             if is_main_process(rank):
-                print(f"Model compiled (mode={compile_mode})")
+                print(f"Model compiled (mode={cfg.get('compile_mode', 'default')})")
         except Exception as e:
             if is_main_process(rank):
-                print(f"torch.compile failed: {e}; continuing without compilation")
+                print(f"torch.compile failed: {e}")
     
-    # Wrap model in DDP if enabled
+    # Wrap in DDP if distributed
     if use_ddp:
-        if torch.cuda.is_available():
-            model = DDP(model, device_ids=[local_rank], output_device=local_rank)
-        else:
-            model = DDP(model)
+        ddp_kwargs = {'device_ids': [local_rank], 'output_device': local_rank} if torch.cuda.is_available() else {}
+        model = DDP(model, **ddp_kwargs)
         if is_main_process(rank):
-            print(f"Model wrapped in DistributedDataParallel (world_size={world_size}, local_rank={local_rank})")
+            print(f"DDP enabled (world_size={world_size}, local_rank={local_rank})")
     
     # Medical-grade loss function with optional focal loss and class weighting
     loss_type = cfg.get('loss_type', 'cross_entropy')  # 'cross_entropy' or 'focal'
@@ -701,48 +739,36 @@ def train_phase1(config: Dict[str, Any]):
     patience_counter = 0
     early_stop_patience = cfg.get('early_stop_patience', cfg.get('early_stopping_patience', 10))  # Early stopping
     
-    # Check for checkpoint to resume from (main process only loads)
+    # Load checkpoint if resuming
+    checkpoint_loaded = False
     if resume_training and checkpoint_path.exists() and is_main_process(rank):
-        print(f"Found checkpoint at {checkpoint_path}, resuming training...")
         try:
             checkpoint = torch.load(checkpoint_path, map_location=device)
-            # Load model state (unwrap DDP if needed)
-            model_state = checkpoint['model_state_dict']
-            if use_ddp:
-                model.module.load_state_dict(model_state)
-            else:
-                model.load_state_dict(model_state)
+            (model.module if use_ddp else model).load_state_dict(checkpoint['model_state_dict'])
             optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
-            if 'scheduler_state_dict' in checkpoint:
-                scheduler.load_state_dict(checkpoint['scheduler_state_dict'])
+            scheduler.load_state_dict(checkpoint.get('scheduler_state_dict', scheduler.state_dict()))
             start_epoch = checkpoint['epoch'] + 1
             best_score = checkpoint['best_score']
             best_metrics = checkpoint.get('best_metrics', {})
             history = checkpoint.get('history', [])
             patience_counter = checkpoint.get('patience_counter', 0)
-            
-            print(f"Resumed from epoch {checkpoint['epoch']}")
-            print(f"Best {best_key} so far: {best_score:.4f}")
+            print(f"Resumed from epoch {checkpoint['epoch']}, best {best_key}: {best_score:.4f}")
+            checkpoint_loaded = True
             if use_ddp:
                 torch.distributed.barrier()
                 broadcast_model_parameters(model)
         except Exception as e:
-            print(f"Warning: Failed to load checkpoint: {e}")
-            print("Starting training from scratch...")
-            start_epoch = 0
+            print(f"Checkpoint load failed: {e}. Starting fresh.")
     elif is_main_process(rank):
-        if resume_training:
-            print("No checkpoint found, starting training from scratch...")
-        else:
-            print("Resume disabled, starting training from scratch...")
+        print("Starting training from scratch" + (" (no checkpoint)" if resume_training else " (resume disabled)"))
     
-    # Broadcast start_epoch to all processes in DDP
+    # Sync all DDP ranks
     if use_ddp:
-        torch.distributed.barrier()  # Ensure all ranks ready before broadcast
+        torch.distributed.barrier()
         start_epoch_tensor = torch.tensor(start_epoch, device=device)
         torch.distributed.broadcast(start_epoch_tensor, src=0)
         start_epoch = start_epoch_tensor.item()
-        if not (resume_training and checkpoint_path.exists()):
+        if not checkpoint_loaded:
             broadcast_model_parameters(model)
     
     accumulation_steps = int(cfg.get('accumulation_steps', 1))
@@ -796,40 +822,11 @@ def train_phase1(config: Dict[str, Any]):
         
         # Logging (main process only)
         if is_main_process(rank):
-            writer.add_scalar('Loss/train', train_log['loss'], epoch)
-            writer.add_scalar('Loss/val', val_log['loss'], epoch)
-            writer.add_scalar('AUC/train', train_log['auc'], epoch)
-            writer.add_scalar('AUC/val', val_log['auc'], epoch)
-            writer.add_scalar('Accuracy/train', train_log['acc'], epoch)
-            writer.add_scalar('Accuracy/val', val_log['acc'], epoch)
+            for metric_name, metric_dict in [('Loss', 'loss'), ('AUC', 'auc'), ('Accuracy', 'acc')]:
+                writer.add_scalar(f'{metric_name}/train', train_log[metric_dict], epoch)
+                writer.add_scalar(f'{metric_name}/val', val_log[metric_dict], epoch)
             writer.add_scalar('Learning_Rate', optimizer.param_groups[0]['lr'], epoch)
-            
-            if use_wandb:
-                wandb_log = {
-                    'epoch': epoch + 1,
-                    'train/loss': train_log['loss'],
-                    'train/auc': train_log['auc'],
-                    'train/accuracy': train_log['acc'],
-                    'val/loss': val_log['loss'],
-                    'val/auc': val_log['auc'],
-                    'val/accuracy': val_log['acc'],
-                    'learning_rate': optimizer.param_groups[0]['lr'],
-                }
-                # Add medical-grade metrics if available
-                if 'sensitivity' in val_log and np.isfinite(val_log['sensitivity']):
-                    wandb_log['val/sensitivity'] = val_log['sensitivity']
-                    wandb_log['val/specificity'] = val_log['specificity']
-                    wandb_log['val/opt_threshold'] = val_log.get('opt_threshold', 0.5)
-                
-                if torch.cuda.is_available():
-                    wandb_log['gpu/memory_allocated_gb'] = torch.cuda.memory_allocated() / 1024**3
-                    wandb_log['gpu/memory_reserved_gb'] = torch.cuda.memory_reserved() / 1024**3
-                    wandb_log['gpu/max_memory_allocated_gb'] = torch.cuda.max_memory_allocated() / 1024**3
-                # Add optimal-threshold clinical metrics if available
-                if 'sensitivity_opt' in val_log and np.isfinite(val_log['sensitivity_opt']):
-                    wandb_log['val/sensitivity_opt'] = val_log['sensitivity_opt']
-                    wandb_log['val/specificity_opt'] = val_log['specificity_opt']
-                wandb.log(wandb_log)
+            log_wandb_epoch(train_log, val_log, epoch, optimizer, use_wandb)
 
         # Check improvement and early stopping
         cur_score = val_log.get(best_key, float('-inf'))
@@ -856,64 +853,30 @@ def train_phase1(config: Dict[str, Any]):
                 model_state = model.module.state_dict() if use_ddp else model.state_dict()
                 torch.save(model_state, models_dir / 'model_phase1.pth')
                 if use_wandb:
-                    wandb.run.summary['best_epoch'] = epoch
-                    wandb.run.summary['best_val_auc'] = float(val_log['auc'])
-                    wandb.run.summary['best_val_acc'] = float(val_log['acc'])
-                    wandb.run.summary['best_val_loss'] = float(val_log['loss'])
-                    wandb.run.summary['best_val_opt_threshold'] = float(val_log.get('opt_threshold', 0.5))
-                    
-                    # Medical-grade metrics
-                    if 'sensitivity' in val_log and np.isfinite(val_log['sensitivity']):
-                        wandb.run.summary['best_val_sensitivity'] = float(val_log['sensitivity'])
-                        wandb.run.summary['best_val_specificity'] = float(val_log['specificity'])
-                    
-                    if 'report_opt' in val_log and isinstance(val_log['report_opt'], dict):
-                        her2_pos_metrics = val_log['report_opt'].get('HER2+', {})
-                        wandb.run.summary['best_val_pos_precision'] = her2_pos_metrics.get('precision')
-                        wandb.run.summary['best_val_pos_recall'] = her2_pos_metrics.get('recall')
-                        wandb.run.summary['best_val_pos_f1'] = her2_pos_metrics.get('f1-score')
-                    if 'sensitivity_opt' in val_log and np.isfinite(val_log['sensitivity_opt']):
-                        wandb.run.summary['best_val_sensitivity_opt'] = float(val_log['sensitivity_opt'])
-                        wandb.run.summary['best_val_specificity_opt'] = float(val_log['specificity_opt'])
+                    update_wandb_best_summary(val_log, epoch)
         else:
             patience_counter += 1
         
-        dur = time.time() - t0
-        
-        # Update progress and print summary (main process only)
+        # Progress update (main process only)
         if is_main_process(rank):
-            epoch_pbar.set_postfix({
-                'train_auc': f'{train_log["auc"]:.4f}',
-                'val_auc': f'{val_log["auc"]:.4f}',
-                'best': '*' if improved else ''
-            })
+            epoch_pbar.set_postfix(train_auc=f'{train_log["auc"]:.4f}', val_auc=f'{val_log["auc"]:.4f}', 
+                                  best='*' if improved else '')
             tqdm.write(
-                f"Epoch {epoch+1}/{epochs} | "
-                f"train: loss={train_log['loss']:.4f} auc={train_log['auc']:.4f} acc={train_log['acc']:.4f} | "
-                f"val: loss={val_log['loss']:.4f} auc={val_log['auc']:.4f} acc={val_log['acc']:.4f} | "
-                f"LR: {optimizer.param_groups[0]['lr']:.2e} | "
-                f"{'*' if improved else ''} ({dur:.1f}s)"
+                f"Epoch {epoch+1}/{epochs} | train: L={train_log['loss']:.4f} AUC={train_log['auc']:.4f} "
+                f"Acc={train_log['acc']:.4f} | val: L={val_log['loss']:.4f} AUC={val_log['auc']:.4f} "
+                f"Acc={val_log['acc']:.4f} | LR={optimizer.param_groups[0]['lr']:.2e} {'*' if improved else ''} "
+                f"({time.time()-t0:.1f}s)"
             )
         
         # Save checkpoint (main process only)
         if is_main_process(rank):
-            model_state = model.module.state_dict() if use_ddp else model.state_dict()
-            checkpoint = {
-                'epoch': epoch,
-                'model_state_dict': model_state,
-                'optimizer_state_dict': optimizer.state_dict(),
-                'scheduler_state_dict': scheduler.state_dict(),
-                'best_score': best_score,
-                'best_metrics': best_metrics,
-                'history': history,
-                'patience_counter': patience_counter,
-                'config': cfg,
-                'wandb_id': wandb_id if use_wandb else None,
-            }
-            torch.save(checkpoint, models_dir / 'checkpoint_last.pth')
-            
+            save_checkpoint(epoch, model, optimizer, scheduler, best_score, best_metrics,
+                          history, patience_counter, cfg, wandb_id if use_wandb else None,
+                          models_dir / 'checkpoint_last.pth', use_ddp)
             if (epoch + 1) % 5 == 0:
-                torch.save(checkpoint, models_dir / f'checkpoint_epoch_{epoch}.pth')
+                save_checkpoint(epoch, model, optimizer, scheduler, best_score, best_metrics,
+                              history, patience_counter, cfg, wandb_id if use_wandb else None,
+                              models_dir / f'checkpoint_epoch_{epoch}.pth', use_ddp)
                 tqdm.write(f"Saved checkpoint at epoch {epoch}")
         
         # Early stopping check
