@@ -1,7 +1,15 @@
 import numpy as np
 
+try:
+    import cupy as cp
+    from cupyx.scipy.linalg import lstsq as cupy_lstsq
+    CUPY_AVAILABLE = True
+except ImportError:
+    CUPY_AVAILABLE = False
 
-def macenko_normalization(image, target_concentrations=None, target_stains=None):
+
+
+def macenko_normalization(image, target_concentrations=None, target_stains=None, use_gpu=False):
     """
     Macenko stain normalization for H&E stained histopathology images.
     
@@ -12,6 +20,7 @@ def macenko_normalization(image, target_concentrations=None, target_stains=None)
         image (np.ndarray): RGB image (H x W x 3), uint8 or float [0-255]
         target_concentrations (np.ndarray, optional): Reference stain concentrations (2 x N)
         target_stains (np.ndarray, optional): Reference stain matrix (3 x 2)
+        use_gpu (bool): If True, use CuPy for GPU acceleration.
     
     Returns:
         np.ndarray: Normalized RGB image (same shape and dtype as input)
@@ -25,76 +34,87 @@ def macenko_normalization(image, target_concentrations=None, target_stains=None)
         - Uses percentile-based thresholding (clinical standard)
         - Returns original dtype for pipeline compatibility
     """
+    # Decide backend based on GPU availability and user request
+    backend = cp if use_gpu and CUPY_AVAILABLE else np
+    
     # Store original dtype for return
     original_dtype = image.dtype
     
     # Handle edge cases
     if image.size == 0:
         return image
-    
-    # Work with float32 internally
-    image_float = image.astype(np.float32) if image.dtype != np.float32 else image
-    
+
+    # Move image to GPU if requested and available
+    if backend == cp:
+        image_gpu = cp.asarray(image, dtype=cp.float32)
+        image_float = image_gpu
+    else:
+        image_float = image.astype(np.float32)
+
     # Convert RGB to optical density (OD)
-    image_od = rgb_to_od(image_float)
+    image_od = rgb_to_od(image_float, backend=backend)
     
     # Extract stain matrix and concentrations from source image
-    stain_matrix_source, concentrations_source = get_stain_matrix(image_od)
+    stain_matrix_source, concentrations_source = get_stain_matrix(image_od, backend=backend)
     
     # Use default reference if not provided
     if target_stains is None or target_concentrations is None:
-        target_stains, target_concentrations = get_default_reference()
+        target_stains, _ = get_default_reference()
     
+    # Move target stains to the correct backend
+    target_stains = backend.asarray(target_stains)
+
     # Reconstruct image with target stains using SOURCE concentrations
     # Keep the tissue structure (concentrations) but change color (stains)
     normalized_od = (target_stains @ concentrations_source).T.reshape(image_od.shape)
-    normalized_image = od_to_rgb(normalized_od)
-    
-    # Free intermediate arrays
-    del image_od, stain_matrix_source, concentrations_source, normalized_od
+    normalized_image = od_to_rgb(normalized_od, backend=backend)
     
     # Ensure output matches input dtype and range
-    normalized_image = np.clip(normalized_image, 0, 255)
-    result = normalized_image.astype(original_dtype)
+    normalized_image = backend.clip(normalized_image, 0, 255)
     
-    # Free normalized_image before return
-    del normalized_image
-    
-    return result
+    # Move result back to CPU if it was on GPU
+    if backend == cp:
+        result = normalized_image.get()
+    else:
+        result = normalized_image
+        
+    return result.astype(original_dtype)
 
 
-def rgb_to_od(image):
+def rgb_to_od(image, backend=np):
     """
     Convert RGB image to Optical Density (OD) space.
     
     OD = -log10(I/I0), where I is intensity and I0 is incident light (255).
     
     Args:
-        image (np.ndarray): RGB image, float32 [0-255]
+        image (np.ndarray or cp.ndarray): RGB image, float32 [0-255]
+        backend (module): numpy or cupy
     
     Returns:
-        np.ndarray: Optical density values (H x W x 3)
+        np.ndarray or cp.ndarray: Optical density values (H x W x 3)
     """
     # Convert to optical density: OD = -log10(I/255), avoiding log(0)
-    return -np.log10((image + 1.0) / 256.0)
+    return -backend.log10((image + 1.0) / 256.0)
 
 
-def od_to_rgb(od):
+def od_to_rgb(od, backend=np):
     """
     Convert Optical Density (OD) back to RGB space.
     
     I = 255 * 10^(-OD)
     
     Args:
-        od (np.ndarray): Optical density values
+        od (np.ndarray or cp.ndarray): Optical density values
+        backend (module): numpy or cupy
     
     Returns:
-        np.ndarray: RGB image, float32 [0-255]
+        np.ndarray or cp.ndarray: RGB image, float32 [0-255]
     """
-    return 255.0 * np.power(10.0, -od)
+    return 255.0 * backend.power(10.0, -od)
 
 
-def get_stain_matrix(image_od, alpha=1, beta=0.15):
+def get_stain_matrix(image_od, backend=np, alpha=1, beta=0.15):
     """
     Extract H&E stain matrix using Macenko's method.
     
@@ -102,13 +122,14 @@ def get_stain_matrix(image_od, alpha=1, beta=0.15):
     (Hematoxylin and Eosin) in the optical density space.
     
     Args:
-        image_od (np.ndarray): Optical density image (H x W x 3)
+        image_od (np.ndarray or cp.ndarray): Optical density image (H x W x 3)
+        backend (module): numpy or cupy
         alpha (float): Percentile for robust angle selection (default: 1%)
         beta (float): OD threshold to exclude background (default: 0.15)
     
     Returns:
-        stain_matrix (np.ndarray): 3x2 matrix of stain vectors
-        concentrations (np.ndarray): 2xN matrix of stain concentrations
+        stain_matrix (np.ndarray or cp.ndarray): 3x2 matrix of stain vectors
+        concentrations (np.ndarray or cp.ndarray): 2xN matrix of stain concentrations
     
     Practical notes:
         - Beta=0.15 is clinically validated for H&E slides
@@ -124,42 +145,46 @@ def get_stain_matrix(image_od, alpha=1, beta=0.15):
     # Handle edge case: no tissue pixels
     if od_tissue.shape[0] < 2:
         # Return identity-like stain matrix
-        stain_matrix = np.array([[0.644, 0.716], 
-                                  [0.092, 0.954], 
-                                  [0.759, 0.650]])
-        concentrations = np.zeros((2, od_flat.shape[0]))
+        stain_matrix = backend.array([[0.644, 0.716], 
+                                     [0.092, 0.954], 
+                                     [0.759, 0.650]])
+        concentrations = backend.zeros((2, od_flat.shape[0]))
         return stain_matrix, concentrations
     
     # Singular Value Decomposition to find principal stain directions
     # od_tissue.T is (3, N), so U is (3, 3) - the left singular vectors
-    U, _, _ = np.linalg.svd(od_tissue.T, full_matrices=False)
+    U, _, _ = backend.linalg.svd(od_tissue.T, full_matrices=False)
     U = U[:, :2]  # (3, 2) - the two principal directions in 3D OD space
     
     # Project tissue OD onto this 2D plane
     projected = od_tissue @ U  # (N, 3) @ (3, 2) = (N, 2)
     
     # Find extreme angles (robust to outliers using percentiles)
-    angles = np.arctan2(projected[:, 1], projected[:, 0])
-    min_angle = np.percentile(angles, alpha)
-    max_angle = np.percentile(angles, 100 - alpha)
+    angles = backend.arctan2(projected[:, 1], projected[:, 0])
+    min_angle = backend.percentile(angles, alpha)
+    max_angle = backend.percentile(angles, 100 - alpha)
     
     # Compute stain vectors from extreme angles in the 2D projected space
     # Then map back to 3D OD space using U basis
-    v1 = np.cos(min_angle) * U[:, 0] + np.sin(min_angle) * U[:, 1]
-    v2 = np.cos(max_angle) * U[:, 0] + np.sin(max_angle) * U[:, 1]
+    v1 = backend.cos(min_angle) * U[:, 0] + backend.sin(min_angle) * U[:, 1]
+    v2 = backend.cos(max_angle) * U[:, 0] + backend.sin(max_angle) * U[:, 1]
     
     # Ensure H (hematoxylin) has higher OD in blue channel
     if v1[2] > v2[2]:
-        stain_matrix = np.column_stack([v1, v2])
+        stain_matrix = backend.stack([v1, v2], axis=1)
     else:
-        stain_matrix = np.column_stack([v2, v1])
+        stain_matrix = backend.stack([v2, v1], axis=1)
     
     # Normalize stain vectors
-    stain_matrix = stain_matrix / np.linalg.norm(stain_matrix, axis=0, keepdims=True)
+    stain_matrix = stain_matrix / backend.linalg.norm(stain_matrix, axis=0, keepdims=True)
     
     # Calculate concentrations: C = inv(S) @ OD
-    concentrations = np.linalg.lstsq(stain_matrix, od_flat.T, rcond=None)[0]
-    concentrations = np.maximum(concentrations, 0)  # Non-negative constraint
+    if backend == cp:
+        concentrations = cupy_lstsq(stain_matrix, od_flat.T)[0]
+    else:
+        concentrations = np.linalg.lstsq(stain_matrix, od_flat.T, rcond=None)[0]
+    
+    concentrations = backend.maximum(concentrations, 0)  # Non-negative constraint
     
     return stain_matrix, concentrations
 
