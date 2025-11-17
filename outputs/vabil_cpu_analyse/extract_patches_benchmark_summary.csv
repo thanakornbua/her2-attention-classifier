@@ -1,0 +1,8 @@
+# summary
+n_slides,time_seconds_mean,time_seconds_median,time_seconds_std,time_seconds_min,time_seconds_max,mem_rss_delta_mb_mean,mem_rss_delta_mb_median,mem_rss_delta_mb_std,mem_rss_delta_mb_max
+15,126.51185132662455,68.09996509552002,114.87685153333895,9.314233779907228,334.4121882915497,,,,
+
+# correlations
+feature,vs,pearson_r,pearson_p,spearman_r,spearman_p,n
+wsi_pixels,time_seconds,0.9879133372101256,6.5429056066068995e-12,0.9928571428571428,2.1681214863293047e-13,15
+num_patches,time_seconds,0.9881252433923615,5.8352580254586866e-12,0.9928571428571428,2.1681214863293047e-13,15

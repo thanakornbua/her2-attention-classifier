@@ -10,17 +10,20 @@
 *.pyc
 *.xml
 *.svs
-*.csv
 *.txt
 *.sums
 *.xlsx
-*.png
 *.log
 data/
 __pycache__/
+/plots/
+/outputs/opt_gpu_analyse/
+/outputs/vanil_gpu_analyse/
+/outputs/opt_cpu_analyse/
 
 *.log
 outputs/preprocessing/logs/preprocessing.log
 outputs/phase1/models/model_phase1.pth
+outputs/patches
 *.tfevents.*
 *.wandb
