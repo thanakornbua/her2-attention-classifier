@@ -1,19 +1,33 @@
 from pathlib import Path
-from typing import Tuple
+from typing import Tuple, Optional
+import os
+import importlib
 
+# Optional cucim backend
 try:
-    from cucim import CuImage
-    _HAS_CUCIM = True
+    _mod_cucim = importlib.import_module('cucim')
+    CuImage = getattr(_mod_cucim, 'CuImage', None)
+    _HAS_CUCIM = CuImage is not None
 except Exception:
     CuImage = None
     _HAS_CUCIM = False
 
+# OpenSlide backend (commonly installed via openslide-python)
 try:
     from openslide import OpenSlide
-    _HAS_OPENSLIDE = True
+    _HAS_OPENSLIDE = True and (OpenSlide is not None)
 except Exception:
     OpenSlide = None
     _HAS_OPENSLIDE = False
+
+# Optional TiffSlide backend
+try:
+    _mod_tiffslide = importlib.import_module('tiffslide')
+    TiffSlide = getattr(_mod_tiffslide, 'TiffSlide', None)
+    _HAS_TIFFSLIDE = TiffSlide is not None
+except Exception:
+    TiffSlide = None
+    _HAS_TIFFSLIDE = False
 
 
 class WSIReader:
@@ -83,9 +97,9 @@ class WSIReader:
             self.level_dimensions = [self.dimensions]
             self.level_downsamples = [1.0]
         else:
-            # OpenSlide-like object
+            # OpenSlide/TiffSlide-like object
             self.dimensions = self._r.dimensions
-            # level_dimensions and downsamples should exist on OpenSlide
+            # level_dimensions and downsamples should exist
             try:
                 self.level_dimensions = list(self._r.level_dimensions)
             except Exception:
@@ -128,6 +142,7 @@ class WSIReader:
             level: pyramid level to read from
             size: (width, height) tuple
             device: 'cpu' or 'cuda' - where to store the image data (CuCIM only)
+                   When device='cuda', returns GPU array if possible for downstream GPU processing
         """
         if self._closed:
             raise RuntimeError("Cannot read from closed WSIReader")
@@ -158,11 +173,14 @@ class WSIReader:
                     return a
                 # Check if it's a CuPy array (GPU memory)
                 try:
-                    import cupy as cp
-                    if isinstance(a, cp.ndarray):
+                    import cupy as cp  # type: ignore
+                except ImportError:
+                    cp = None  # type: ignore
+                try:
+                    if cp is not None and isinstance(a, cp.ndarray):  # type: ignore
                         # Transfer from GPU to CPU
-                        return cp.asnumpy(a)
-                except (ImportError, Exception):
+                        return cp.asnumpy(a)  # type: ignore
+                except Exception:
                     pass
                 # Try numpy.asarray first
                 try:
@@ -187,6 +205,22 @@ class WSIReader:
             try:
                 import numpy as _np
                 from PIL import Image
+                
+                # If device='cuda' and arr is already a GPU array, keep it on GPU longer
+                # Only convert to CPU when we must create a PIL.Image for saving
+                # This allows downstream GPU processing (e.g., normalization) to work on GPU data
+                try:
+                    import cupy as cp  # type: ignore
+                except ImportError:
+                    cp = None  # type: ignore
+                try:
+                    is_gpu_array = (cp is not None) and isinstance(arr, cp.ndarray)  # type: ignore
+                except Exception:
+                    is_gpu_array = False
+                
+                # For GPU arrays requested via device='cuda', we still need to convert to PIL
+                # for compatibility with the current pipeline (saving PNGs)
+                # A future optimization could keep data on GPU until the last moment
                 arr_np = _to_numpy(arr)
                 if arr_np is None:
                     # As last resort, request CPU explicitly again
@@ -198,12 +232,30 @@ class WSIReader:
                 if arr_np is None:
                     # Give up and return whatever came back
                     return arr
+                # Normalize dtype for PIL
+                if arr_np.dtype.kind in ('f',):
+                    # Float images: assume 0..1 or 0..255 range
+                    m = _np.nanmax(arr_np) if arr_np.size > 0 else 1.0
+                    if m <= 1.0 + 1e-6:
+                        arr_np = (arr_np * 255.0).clip(0, 255)
+                    arr_np = arr_np.astype(_np.uint8)
+                elif arr_np.dtype == _np.uint16:
+                    # Scale 16-bit to 8-bit
+                    arr_np = (arr_np / 257).astype(_np.uint8)
+                elif arr_np.dtype.kind not in ('u', 'i'):
+                    # Any other types -> uint8 best effort
+                    arr_np = arr_np.astype(_np.uint8, copy=False)
                 # Ensure (H,W,3) for PIL
                 if arr_np.ndim == 3 and arr_np.shape[2] >= 3:
                     return Image.fromarray(arr_np[:, :, :3])
                 elif arr_np.ndim == 2:
                     return Image.fromarray(arr_np).convert('RGB')
                 else:
+                    # If different channel order, try to squeeze/expand
+                    if arr_np.ndim == 3 and arr_np.shape[0] in (3, 4) and arr_np.shape[2] == 1:
+                        # Likely (C,H,W) with C in first dim
+                        arr_np = _np.transpose(arr_np, (1, 2, 0))
+                        return Image.fromarray(arr_np[:, :, :3])
                     return Image.fromarray(arr_np)
             except Exception:
                 return arr
@@ -212,31 +264,86 @@ class WSIReader:
             return self._r.read_region((x, y), level, (w, h))
 
 
-def load_wsi(wsi_path):
-    """Load a WSI and return a `WSIReader` wrapper using CuCIM if available.
+def _env_backend_preference() -> Optional[str]:
+    """Read backend preference from environment variable HER2_WSI_BACKEND.
 
-    Raises FileNotFoundError if the file does not exist. Returns None on failure.
+    Returns 'openslide', 'cucim', 'tiffslide', or None.
+    """
+    val = os.environ.get('HER2_WSI_BACKEND') or os.environ.get('WSI_BACKEND')
+    if not val:
+        return None
+    val = str(val).strip().lower()
+    if val in ('openslide', 'cucim', 'tiffslide'):
+        return val
+    return None
+
+
+def load_wsi(wsi_path, prefer_backend: Optional[str] = None, force_backend: Optional[str] = None):
+    """Load a WSI and return a `WSIReader` wrapper.
+
+    Selection order:
+    - If force_backend is provided ('openslide', 'cucim', 'tiffslide'), try only that backend.
+    - Else, if HER2_WSI_BACKEND env var is set, try that backend first then fallback.
+    - Else, if prefer_backend is provided, try it first then fallback.
+    - Else, prefer CuCIM when available, otherwise OpenSlide, then TiffSlide.
     """
     wsi_path = Path(wsi_path)
     if not wsi_path.exists():
         raise FileNotFoundError(f"WSI not found: {wsi_path}")
 
-    # Prefer CuCIM for speed if present
-    if _HAS_CUCIM:
-        try:
-            reader = CuImage(str(wsi_path))
-            return WSIReader(wsi_path, 'cucim', reader)
-        except Exception as e:
-            # fallback to OpenSlide
-            print(f"CuCIM available but failed to open {wsi_path.name}: {e}")
+    # Normalize backend strings
+    def norm(b):
+        return b if b in (None, 'openslide', 'cucim', 'tiffslide') else None
 
-    if _HAS_OPENSLIDE:
-        try:
-            reader = OpenSlide(str(wsi_path))
-            return WSIReader(wsi_path, 'openslide', reader)
-        except Exception as e:
-            print(f"OpenSlide failed to open {wsi_path.name}: {e}")
+    prefer_backend = norm(prefer_backend)
+    force_backend = norm(force_backend)
+    env_backend = _env_backend_preference()
 
-    # If neither backend worked, return None
-    print(f"Failed to load WSI with available backends: {wsi_path}")
+    order = []
+    if force_backend:
+        order = [force_backend]
+    else:
+        if env_backend:
+            order.append(env_backend)
+        if prefer_backend:
+            order.append(prefer_backend)
+        # Default priority
+        order.extend(['cucim', 'openslide', 'tiffslide'])
+
+    # Remove duplicates while preserving order
+    seen = set()
+    ordered_backends = []
+    for b in order:
+        if b and b not in seen:
+            seen.add(b)
+            ordered_backends.append(b)
+
+    last_error = None
+    for backend in ordered_backends:
+        if backend == 'cucim' and _HAS_CUCIM and (CuImage is not None):
+            try:
+                reader = CuImage(str(wsi_path))
+                return WSIReader(wsi_path, 'cucim', reader)
+            except Exception as e:
+                last_error = e
+                print(f"CuCIM failed to open {wsi_path.name}: {e}")
+        elif backend == 'openslide' and _HAS_OPENSLIDE and (OpenSlide is not None):
+            try:
+                reader = OpenSlide(str(wsi_path))
+                return WSIReader(wsi_path, 'openslide', reader)
+            except Exception as e:
+                last_error = e
+                print(f"OpenSlide failed to open {wsi_path.name}: {e}")
+        elif backend == 'tiffslide' and _HAS_TIFFSLIDE and (TiffSlide is not None):
+            try:
+                reader = TiffSlide(str(wsi_path))
+                return WSIReader(wsi_path, 'tiffslide', reader)
+            except Exception as e:
+                last_error = e
+                print(f"TiffSlide failed to open {wsi_path.name}: {e}")
+
+    if last_error:
+        print(f"Failed to load WSI with available backends ({ordered_backends}): {wsi_path}\nLast error: {last_error}")
+    else:
+        print(f"Failed to load WSI with available backends: {wsi_path}")
     return None

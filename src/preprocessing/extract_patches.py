@@ -159,7 +159,11 @@ def extract_patches(
             is_valid = True
             try:
                 patch = _read_patch(wsi_slide, x_level0, y_level0, level, size, use_gpu)
-                if patch.mode == 'RGBA':
+                
+                # Ensure patch is a PIL Image and convert RGBA to RGB if needed
+                if hasattr(patch, 'mode') and patch.mode == 'RGBA':
+                    patch = patch.convert('RGB')
+                elif hasattr(patch, 'mode') and patch.mode not in ['RGB', 'L']:
                     patch = patch.convert('RGB')
 
                 metadata = {
@@ -305,19 +309,70 @@ def _read_patch(
     size: int,
     use_gpu: bool
 ) -> Image.Image:
-    """Read a patch from the WSI, optionally using GPU."""
+    """Read a patch from the WSI, optionally using GPU.
+    
+    Always returns a PIL Image for compatibility with downstream processing.
+    """
     if use_gpu and hasattr(wsi_slide, 'backend') and wsi_slide.backend == 'cucim':
-        return wsi_slide.read_region(
+        patch = wsi_slide.read_region(
             location=(x_level0, y_level0),
             level=level,
             size=(size, size),
             device='cuda'
         )
-    return wsi_slide.read_region(
-        location=(x_level0, y_level0),
-        level=level,
-        size=(size, size)
-    )
+    else:
+        patch = wsi_slide.read_region(
+            location=(x_level0, y_level0),
+            level=level,
+            size=(size, size)
+        )
+    
+    # Ensure we return a PIL Image
+    if not isinstance(patch, Image.Image):
+        import numpy as np
+        try:
+            import cupy as cp  # type: ignore
+        except ImportError:
+            cp = None  # type: ignore
+        # Convert CuPy to NumPy if needed
+        try:
+            if cp is not None and isinstance(patch, cp.ndarray):  # type: ignore
+                patch = cp.asnumpy(patch)  # type: ignore
+        except Exception:
+            pass
+        
+        if isinstance(patch, np.ndarray):
+            arr = patch
+            # Normalize dtype for PIL
+            if arr.dtype.kind in ('f',):
+                m = float(np.nanmax(arr)) if arr.size > 0 else 1.0
+                if m <= 1.0 + 1e-6:
+                    arr = (arr * 255.0).clip(0, 255)
+                arr = arr.astype(np.uint8)
+            elif arr.dtype == np.uint16:
+                arr = (arr / 257).astype(np.uint8)
+            elif arr.dtype.kind not in ('u', 'i'):
+                arr = arr.astype(np.uint8, copy=False)
+            # Handle channel order/shape
+            if arr.ndim == 3:
+                if arr.shape[2] >= 3:
+                    return Image.fromarray(arr[:, :, :3])
+                # Possibly (C,H,W)
+                if arr.shape[0] in (3, 4) and (arr.shape[1] == size and arr.shape[2] == size):
+                    arr = np.transpose(arr, (1, 2, 0))
+                    return Image.fromarray(arr[:, :, :3])
+                # Fallback to squeeze and convert
+                arr = np.squeeze(arr)
+                if arr.ndim == 2:
+                    return Image.fromarray(arr).convert('RGB')
+                else:
+                    return Image.fromarray(arr)
+            elif arr.ndim == 2:
+                return Image.fromarray(arr).convert('RGB')
+            else:
+                return Image.fromarray(arr)
+
+    return patch
 
 def process_slide(row, base_dir=None):
     """Process a single slide to extract patches.
