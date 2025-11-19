@@ -36,9 +36,10 @@ import torch.optim as optim
 import torchvision.models as models
 import torchvision.transforms as T
 from PIL import Image
-from sklearn.metrics import (accuracy_score, classification_report,
-                             confusion_matrix, roc_auc_score, roc_curve)
+from sklearn.metrics import classification_report, roc_curve
 from torch.cuda.amp import GradScaler, autocast
+
+from src.utils.metric import classification_metrics, confusion_matrix_and_counts, multiclass_auroc
 from torch.nn.parallel import DistributedDataParallel as DDP
 from torch.nn.utils import clip_grad_norm_
 from torch.utils.data import DataLoader, Dataset
@@ -285,29 +286,30 @@ def evaluate(model, loader, criterion, device, epoch, rank):
         # but for precise AUC/thresholding, gathering all probs/targets is better.
         pass
 
-    # --- Calculate Metrics ---
+    # --- Calculate Metrics (using unified metric.py) ---
+    all_targets = np.array(all_targets)
+    all_preds = np.array(all_preds)
+    all_probs_2d = np.column_stack([1 - np.array(all_probs), np.array(all_probs)])
+    
+    metrics = classification_metrics(all_targets, all_preds)
+    cm, tp, fn, fp, tn = confusion_matrix_and_counts(all_targets, all_preds)
+    
     try:
-        auc = roc_auc_score(all_targets, all_probs)
-    except ValueError:
-        auc = 0.5 # Handle case with only one class in a batch
+        auc = multiclass_auroc(all_targets, all_probs_2d)
+    except:
+        auc = 0.5
     
-    acc = accuracy_score(all_targets, all_preds)
-    cm = confusion_matrix(all_targets, all_preds)
-    tn, fp, fn, tp = cm.ravel() if cm.shape == (2, 2) else (0, 0, 0, 0)
+    sensitivity = float(tp[1] / (tp[1] + fn[1])) if (tp[1] + fn[1]) > 0 else 0.0
+    specificity = float(tn[1] / (tn[1] + fp[1])) if (tn[1] + fp[1]) > 0 else 0.0
     
-    sensitivity = tp / (tp + fn) if (tp + fn) > 0 else 0.0
-    specificity = tn / (tn + fp) if (tn + fp) > 0 else 0.0
-
     # Optimal threshold (Youden's J)
     fpr, tpr, thresholds = roc_curve(all_targets, all_probs)
-    j_scores = tpr - fpr
-    opt_thresh_idx = np.argmax(j_scores)
-    opt_threshold = thresholds[opt_thresh_idx]
-
+    opt_threshold = thresholds[np.argmax(tpr - fpr)]
+    
     return {
         'loss': running_loss / len(loader),
         'auc': auc,
-        'acc': acc,
+        'acc': metrics['accuracy'],
         'sensitivity': sensitivity,
         'specificity': specificity,
         'opt_threshold': opt_threshold,
