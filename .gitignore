@@ -26,7 +26,13 @@ __pycache__/
 *.log
 outputs/preprocessing/logs/preprocessing.log
 outputs/phase1/models/model_phase1.pth
+outputs/patches_index_val.csv
+outputs/ref_stain_stats.npz
+outputs/patches_index_train.csv
 outputs/patches
+outputs/phase1
+outputs/preprocessing
+outputs/test_large_dataset
 *.tfevents.*
 *.wandb
 outputs/patches_index_train.csv
