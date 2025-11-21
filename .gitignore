@@ -14,6 +14,8 @@
 *.sums
 *.xlsx
 *.log
+*.csv
+
 data/
 __pycache__/
 /plots/
