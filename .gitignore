@@ -29,3 +29,4 @@ outputs/phase1/models/model_phase1.pth
 outputs/patches
 *.tfevents.*
 *.wandb
+outputs/patches_index_train.csv
