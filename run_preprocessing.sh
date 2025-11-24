@@ -3,10 +3,10 @@
 # Edit the paths below to match your setup
 
 # Configuration
-DATA_ROOT="/media/thanakornbuath/data SSD/her2-attention-classifier/data"
+DATA_ROOT="/home/thanakornbuath/hdd/her2-attention-classifier/data"
 OUTPUTS_ROOT="/media/thanakornbuath/data SSD/her2-attention-classifier/outputs"
-ZARR_OUTPUT_DIR="/media/thanakornbuath/patch/zarr_norm"
-PATCHES_ROOT="/media/thanakornbuath/data SSD/her2-attention-classifier/outputs/patches"
+ZARR_OUTPUT_DIR="/media/thanakornbuath/data SSD/her2-attention-classifier/zarr_raw"
+PATCHES_ROOT="/home/thanakornbuath/hdd/her2-attention-classifier/outputs/patches"
 
 # Parameters
 PATCH_SIZE=512
@@ -16,12 +16,36 @@ BATCH_SIZE=128
 TISSUE_THRESHOLD=0.2
 NUM_REF_SUBFOLDERS=100
 IMAGES_PER_FOLDER=200
-
-# Cohorts to process
-COHORTS="TCGA_BRCA_Filtered Yale_HER2_cohort Yale_trastuzumab_response_cohort"
+REF_MODE="slides"            # or "patches"
+REF_SLIDES=200                 # used when REF_MODE=slides
+REF_PATCHES_PER_SLIDE=100      # used when REF_MODE=slides
+REF_DATA_ROOT="$DATA_ROOT"   # override if reference slides live elsewhere
+SLIDE_FRACTION=0.8            # fraction of slides to process (0-1]
+SLIDE_FRACTION_SEED=42
+SLIDE_WORKERS=1
+SLIDE_WORKER_GPUS=""        # e.g. "0,1" when SLIDE_WORKERS>1
+DISABLE_MACENKO=1             # set to 1 to skip stain normalization entirely
 
 # GPU flag (comment out if no GPU)
 GPU_FLAG="--use-gpu"
+
+GPU_ARGS=()
+if [ -n "$GPU_FLAG" ]; then
+    GPU_ARGS+=("$GPU_FLAG")
+fi
+MACENKO_ARG=()
+if [ "$DISABLE_MACENKO" -eq 1 ]; then
+    MACENKO_ARG+=(--disable-macenko)
+fi
+SLIDE_GPU_ARG=()
+if [ -n "$SLIDE_WORKER_GPUS" ]; then
+    SLIDE_GPU_ARG+=(--slide-worker-gpus "$SLIDE_WORKER_GPUS")
+fi
+SLIDE_WORKER_ARG=(--slide-workers $SLIDE_WORKERS)
+SLIDE_FRACTION_ARGS=(--slide-fraction $SLIDE_FRACTION --slide-fraction-seed $SLIDE_FRACTION_SEED)
+
+# Cohorts to process
+COHORTS="TCGA_BRCA_Filtered Yale_HER2_cohort Yale_trastuzumab_response_cohort"
 
 echo "=============================================="
 echo "HER2 Slide Preprocessing Pipeline"
@@ -32,15 +56,31 @@ echo ""
 REF_STATS="$OUTPUTS_ROOT/ref_stain_stats.npz"
 if [ ! -f "$REF_STATS" ]; then
     echo "Step 1: Computing reference stain statistics..."
-    python preprocess_slides_cli.py \
-        --data-root "$DATA_ROOT" \
-        --outputs-root "$OUTPUTS_ROOT" \
-        --zarr-output-dir "$ZARR_OUTPUT_DIR" \
-        --patches-root "$PATCHES_ROOT" \
-        --compute-ref-stats \
-        --num-ref-subfolders $NUM_REF_SUBFOLDERS \
-        --images-per-folder $IMAGES_PER_FOLDER \
-        $GPU_FLAG
+    if [ "$REF_MODE" = "patches" ]; then
+        python preprocess_slides_cli.py \
+            --data-root "$DATA_ROOT" \
+            --outputs-root "$OUTPUTS_ROOT" \
+            --zarr-output-dir "$ZARR_OUTPUT_DIR" \
+            --patches-root "$PATCHES_ROOT" \
+            --compute-ref-stats \
+            --ref-mode patches \
+            --num-ref-subfolders $NUM_REF_SUBFOLDERS \
+            --images-per-folder $IMAGES_PER_FOLDER \
+            ${GPU_ARGS[@]}
+    else
+        python preprocess_slides_cli.py \
+            --data-root "$REF_DATA_ROOT" \
+            --outputs-root "$OUTPUTS_ROOT" \
+            --zarr-output-dir "$ZARR_OUTPUT_DIR" \
+            --compute-ref-stats \
+            --ref-mode slides \
+            --ref-slides $REF_SLIDES \
+            --ref-patches-per-slide $REF_PATCHES_PER_SLIDE \
+            --patch-size $PATCH_SIZE \
+            --downsample-mask $((STRIDE / (STRIDE / PATCH_SIZE))) \
+            --cohorts $COHORTS \
+            ${GPU_ARGS[@]}
+    fi
 
     if [ $? -ne 0 ]; then
         echo "ERROR: Reference stats computation failed!"
@@ -67,7 +107,11 @@ python preprocess_slides_cli.py \
     --tissue-threshold $TISSUE_THRESHOLD \
     --skip-existing \
     --cohorts $COHORTS \
-    $GPU_FLAG
+    ${MACENKO_ARG[@]} \
+    ${GPU_ARGS[@]} \
+    ${SLIDE_WORKER_ARG[@]} \
+    ${SLIDE_GPU_ARG[@]} \
+    ${SLIDE_FRACTION_ARGS[@]}
 
 if [ $? -ne 0 ]; then
     echo "ERROR: Slide processing failed!"
@@ -102,4 +146,3 @@ echo "  - Train manifest: $OUTPUTS_ROOT/zarr_train_manifest.csv"
 echo "  - Val manifest: $OUTPUTS_ROOT/zarr_val_manifest.csv"
 echo "  - Logs: $OUTPUTS_ROOT/logs/preprocess_cli.log"
 echo ""
-

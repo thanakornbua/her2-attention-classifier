@@ -15,6 +15,7 @@ import gc
 import argparse
 from pathlib import Path
 from typing import List, Tuple, Optional, Dict
+import csv
 
 import numpy as np
 import pandas as pd
@@ -22,7 +23,7 @@ from tqdm import tqdm
 import zarr
 from PIL import Image, ImageDraw
 import xml.etree.ElementTree as ET
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import ThreadPoolExecutor, ProcessPoolExecutor, as_completed
 
 try:
     import openslide
@@ -36,220 +37,30 @@ except ImportError:
     print("WARNING: scikit-learn not installed. Train/val split will be skipped.")
     train_test_split = None
 
-
-class MacenkoNormalizer:
-    """Macenko stain normalization with optional CuPy GPU acceleration."""
-    
-    def __init__(self, percentiles: Tuple[float, float] = (1, 99), use_gpu: bool = False):
-        self.percentiles = percentiles
-        self.use_gpu = use_gpu
-        
-        if use_gpu:
-            try:
-                import cupy as cp
-                self.xp = cp
-                self.gpu_available = True
-            except ImportError:
-                print("WARNING: CuPy not available, falling back to CPU")
-                self.xp = np
-                self.gpu_available = False
-                self.use_gpu = False
-        else:
-            self.xp = np
-            self.gpu_available = False
-
-    @staticmethod
-    def _rgb_to_od(image_rgb: np.ndarray) -> np.ndarray:
-        """Convert RGB to Optical Density space."""
-        img = image_rgb.astype(np.float32) + 1.0  # avoid log(0)
-        od = -np.log(img / 255.0)
-        return od
-
-    @staticmethod
-    def _od_to_rgb(image_od: np.ndarray) -> np.ndarray:
-        """Convert OD back to RGB."""
-        rgb = (255.0 * np.exp(-image_od)).clip(0, 255).astype(np.uint8)
-        return rgb
-
-    @staticmethod
-    def _to_cpu(arr):
-        """Convert array to CPU numpy array if it's on GPU."""
-        if hasattr(arr, 'get'):  # CuPy array
-            return arr.get()
-        return np.asarray(arr)
-
-    def _cleanup_gpu(self):
-        """Free GPU memory pools."""
-        if self.use_gpu and self.gpu_available:
-            try:
-                import cupy as cp
-                cp.get_default_memory_pool().free_all_blocks()
-                cp.get_default_pinned_memory_pool().free_all_blocks()
-            except Exception:
-                pass
-
-    def _get_stain_vectors_and_concentrations(self, image_rgb: np.ndarray) -> Tuple[np.ndarray, np.ndarray, Tuple[int, int, int]]:
-        """Extract stain vectors and concentrations from image."""
-        # Convert to OD
-        od = self._rgb_to_od(image_rgb)
-        H, W, CH = od.shape
-        od_reshaped = od.reshape(-1, 3)
-
-        # Filter near-white background
-        mask = np.sum(od_reshaped, axis=1) > 0.2
-        od_filtered = od_reshaped[mask]
-        if od_filtered.shape[0] < 100:
-            od_filtered = od_reshaped
-
-        # Move to xp for PCA
-        xp = self.xp
-        odf = xp.asarray(od_filtered, dtype=xp.float32)
-        odf = odf - odf.mean(axis=0, keepdims=True)
-        
-        # SVD to get top 2 PCs
-        try:
-            U, S, VT = xp.linalg.svd(odf, full_matrices=False)
-            v = VT.T[:, :2]  # (3,2)
-            del U, S, VT  # Free memory immediately
-        except Exception:
-            # CPU fallback if GPU fails
-            U, S, VT = np.linalg.svd(od_filtered - od_filtered.mean(axis=0, keepdims=True), full_matrices=False)
-            v = VT.T[:, :2]
-            del U, S, VT
-            xp = np
-
-        # Normalize columns
-        v = v / xp.linalg.norm(v, axis=0, keepdims=True)
-
-        # Ensure consistent direction
-        for i in range(2):
-            if float(v[:, i].sum()) < 0:
-                v[:, i] = -v[:, i]
-
-        # Macenko angle-based stain separation
-        odf_2d = xp.asarray(od_filtered, dtype=xp.float32) @ v
-        angles = xp.arctan2(odf_2d[:, 1], odf_2d[:, 0])
-
-        # Find angle percentiles
-        angles_cpu = self._to_cpu(angles)
-        min_angle = float(np.percentile(angles_cpu, self.percentiles[0]))
-        max_angle = float(np.percentile(angles_cpu, self.percentiles[1]))
-
-        # Construct stain vectors at extreme angles
-        stain_h = xp.cos(min_angle) * v[:, 0] + xp.sin(min_angle) * v[:, 1]
-        stain_e = xp.cos(max_angle) * v[:, 0] + xp.sin(max_angle) * v[:, 1]
-
-        # Normalize stain vectors
-        stain_h = stain_h / xp.linalg.norm(stain_h)
-        stain_e = stain_e / xp.linalg.norm(stain_e)
-
-        # Stack into matrix [H, E] as columns
-        stain_matrix = xp.column_stack([stain_h, stain_e])
-
-        # Project ALL pixels onto stain vectors
-        od_all = xp.asarray(od_reshaped.astype(np.float32))
-        C = od_all @ stain_matrix
-        C = xp.maximum(C, 0)
-
-        # Back to CPU
-        stain_vectors = self._to_cpu(stain_matrix)
-        concentrations = self._to_cpu(C)
-
-        # Cleanup intermediate arrays
-        del odf_2d, angles, stain_h, stain_e, stain_matrix, odf, od_all, v, C
-
-        return stain_vectors, concentrations, (H, W, CH)
-
-    def get_mean_reference_stain_characteristics(self, list_of_reference_images_rgb: List[np.ndarray]):
-        """Compute mean reference stain characteristics from list of images."""
-        if not list_of_reference_images_rgb:
-            raise ValueError("list_of_reference_images_rgb cannot be empty.")
-        
-        all_V = []
-        max_h = []
-        max_e = []
-        
-        for i, img in enumerate(tqdm(list_of_reference_images_rgb, desc="Computing reference stats")):
-            V, C, _ = self._get_stain_vectors_and_concentrations(img)
-            all_V.append(V)
-            
-            # Extract percentiles and delete C immediately
-            h_val = float(np.percentile(C[:, 0], self.percentiles[1]))
-            e_val = float(np.percentile(C[:, 1], self.percentiles[1]))
-            max_h.append(h_val)
-            max_e.append(e_val)
-            del C, V
-            
-            # Free GPU memory every 10 images
-            if self.use_gpu and (i + 1) % 10 == 0:
-                self._cleanup_gpu()
-            
-            # Force garbage collection every 50 images
-            if (i + 1) % 50 == 0:
-                gc.collect()
-
-        # Compute final statistics
-        mean_V = np.mean(np.stack(all_V, axis=0), axis=0)
-        mean_V = mean_V / np.linalg.norm(mean_V, axis=0, keepdims=True)
-        mean_max_h = float(np.mean(max_h))
-        mean_max_e = float(np.mean(max_e))
-
-        # Cleanup
-        del all_V, max_h, max_e
-        gc.collect()
-        self._cleanup_gpu()
-
-        return mean_V, (mean_max_h, mean_max_e)
-
-    def normalize(self, target_image_rgb: np.ndarray,
-                  mean_ref_stain_vectors: np.ndarray,
-                  mean_ref_max_concentrations_tuple: Tuple[float, float]) -> np.ndarray:
-        """Normalize target image to match reference stain characteristics."""
-        # Target characteristics
-        V_t, C_t, shape = self._get_stain_vectors_and_concentrations(target_image_rgb)
-        max_t_h = np.percentile(C_t[:, 0], self.percentiles[1])
-        max_t_e = np.percentile(C_t[:, 1], self.percentiles[1])
-
-        # Scale concentrations to reference
-        ref_max_h, ref_max_e = mean_ref_max_concentrations_tuple
-        scale_h = ref_max_h / (max_t_h + 1e-6)
-        scale_e = ref_max_e / (max_t_e + 1e-6)
-        
-        Cn = C_t.copy()
-        Cn[:, 0] *= scale_h
-        Cn[:, 1] *= scale_e
-        Cn = np.maximum(Cn, 0)
-
-        # Reconstruct OD using reference stain vectors
-        V_ref = mean_ref_stain_vectors.astype(np.float32)
-        od_norm = (Cn @ V_ref.T).reshape(shape)
-        rgb_norm = self._od_to_rgb(od_norm)
-        
-        # Cleanup
-        del V_t, C_t, Cn, od_norm
-        
-        return rgb_norm
+# Use the tested Macenko implementation from src/preprocessing
+try:
+    from src.preprocessing.stain_normalization import MacenkoNormalizer
+except Exception as e:  # fallback: no stain normalization available
+    MacenkoNormalizer = None
+    logging.warning(f"Could not import MacenkoNormalizer from src.preprocessing.stain_normalization: {e}")
 
 
-def load_reference_stain_params(npz_path: Path, use_gpu: bool = False) -> Optional[Dict]:
-    """Load precomputed reference stain parameters from npz file."""
+def load_reference_stain_params(npz_path: Path) -> Optional[Dict]:
+    """Load precomputed reference stain parameters from npz file (CPU format)."""
+    if not npz_path.exists():
+        return None
     try:
-        if not npz_path.exists():
-            return None
         data = np.load(str(npz_path))
-        if 'stain_vectors' in data and ('max_h' in data or 'mean_max_h' in data):
-            V = data['stain_vectors']
-            max_h = float(data.get('max_h', data.get('mean_max_h')))
-            max_e = float(data.get('max_e', data.get('mean_max_e')))
-            return {
-                'stain_vectors': V,
-                'max_concentrations': (max_h, max_e),
-                'use_gpu': use_gpu,
-                'percentiles': (1, 99)
-            }
+        V = data["stain_vectors"]
+        max_h = float(data.get("max_h", data.get("mean_max_h")))
+        max_e = float(data.get("max_e", data.get("mean_max_e")))
+        return {
+            "stain_vectors": V,
+            "max_concentrations": (max_h, max_e),
+        }
     except Exception as e:
-        logging.error(f"Failed to load reference stain parameters: {e}")
-    return None
+        logging.error(f"Failed to load reference stain parameters from {npz_path}: {e}")
+        return None
 
 
 def load_images_from_folder(folder_path: Path, max_images: int = 200) -> List[np.ndarray]:
@@ -283,9 +94,13 @@ def load_images_from_folder(folder_path: Path, max_images: int = 200) -> List[np
     return images
 
 
-def compute_reference_stats(patches_root: Path, num_subfolders: int, images_per_folder: int,
+def compute_reference_stats_from_patches(patches_root: Path, num_subfolders: int, images_per_folder: int,
                            use_gpu: bool, output_path: Path):
     """Compute reference stain statistics from sample patches."""
+    if MacenkoNormalizer is None:
+        logging.error("MacenkoNormalizer unavailable; cannot compute reference stats")
+        return
+
     print(f"Sampling from up to {num_subfolders} random folders...")
     subfolders = [d for d in patches_root.iterdir() if d.is_dir()]
     num_to_sample = min(num_subfolders, len(subfolders))
@@ -324,79 +139,110 @@ def compute_reference_stats(patches_root: Path, num_subfolders: int, images_per_
 
 
 def discover_slides(data_root: str, cohorts: list) -> List[Dict]:
-    """Discover SVS slides and corresponding XML annotations."""
-    slides = []
-    
+    """Discover SVS slides and corresponding XML annotations with correct labels.
+
+    Labeling rules (per user spec):
+    - If slide_id starts with 'Her2Pos_': label = 1
+    - If slide_id starts with 'Her2Neg_': label = 0
+    - If slide_id starts with 'TCGA-':
+        * Take substring before first '.' (if any) as key
+        * Look up in data/TCGA_BRCA_Filtered/HER2_TCGA_clean.csv
+        * Use 'Slide' column to match key, and 'Clinical.HER2.status' as status column
+        * Map status: Positive/3+/2+ → 1, everything else → 0
+    - All other slides: label = 1 (positive)
+    """
+    slides: List[Dict] = []
+
+    # Pre-load TCGA HER2 table once
+    tcga_csv = Path(data_root) / "TCGA_BRCA_Filtered" / "HER2_TCGA_clean.csv"
+    tcga_map: Dict[str, int] = {}
+    if tcga_csv.exists():
+        try:
+            df_tcga = pd.read_csv(tcga_csv)
+            # Expect columns 'Slide' and 'Clinical.HER2.status'
+            if "Slide" in df_tcga.columns and "Clinical.HER2.status" in df_tcga.columns:
+                def map_tcga_status(s):
+                    if isinstance(s, str):
+                        s_low = s.lower()
+                        if "positive" in s_low or "3+" in s_low or "2+" in s_low:
+                            return 1
+                    return 0
+
+                for _, row in df_tcga.iterrows():
+                    slide_key = str(row["Slide"]).strip()
+                    status = row["Clinical.HER2.status"]
+                    tcga_map[slide_key] = map_tcga_status(status)
+            else:
+                logging.warning(
+                    "TCGA HER2 file %s does not contain expected columns 'Slide' and 'Clinical.HER2.status'",
+                    tcga_csv,
+                )
+        except Exception as e:
+            logging.error(f"Failed to load TCGA HER2 table from {tcga_csv}: {e}")
+
     for cohort in cohorts:
         cohort_dir = Path(data_root) / cohort
         svs_dir = cohort_dir / "SVS"
         xml_dir = cohort_dir / "Annotations"
-        
+
         if not svs_dir.exists():
             print(f"⚠️  SVS directory not found: {svs_dir}")
             continue
         if not xml_dir.exists():
             print(f"⚠️  Annotations directory not found: {xml_dir}")
             continue
-        
-        # Optional labels
-        labels_dict = {}
-        for label_file_name in ['labels.csv', 'HER2_TCGA_clean.csv']:
-            label_file = cohort_dir / label_file_name
-            if label_file.exists():
-                try:
-                    df_labels = pd.read_csv(label_file)
-                    if 'slide_id' in df_labels.columns and 'label' in df_labels.columns:
-                        labels_dict = dict(zip(df_labels['slide_id'], df_labels['label']))
-                    elif 'case_id' in df_labels.columns and 'HER2_IHC_Status' in df_labels.columns:
-                        def map_her2_status(status):
-                            if isinstance(status, str) and (('Positive' in status) or ('3+' in status) or ('2+' in status)):
-                                return 1
-                            return 0
-                        labels_dict = {row['case_id']: map_her2_status(row['HER2_IHC_Status']) 
-                                     for _, row in df_labels.iterrows()}
-                    print(f"✓ Loaded labels for {len(labels_dict)} slides from {cohort}/{label_file_name}")
-                    break
-                except Exception as e:
-                    print(f"⚠️  Failed to load labels from {label_file}: {e}")
-        
+
         # SVS files
         svs_files = list(svs_dir.glob("*.svs")) + list(svs_dir.glob("*.SVS"))
-        
+
         for svs_path in svs_files:
             slide_name = svs_path.stem
-            
-            # For TCGA slides, use only part before first dot to match XML
+
+            # XML lookup: for TCGA use only part before first dot
             xml_base_name = slide_name
             if slide_name.startswith("TCGA-") and "." in slide_name:
                 xml_base_name = slide_name.split(".")[0]
-            
+
             xml_candidates = [
                 xml_dir / f"{xml_base_name}.xml",
                 xml_dir / f"{xml_base_name}.XML",
                 xml_dir / f"{slide_name}.xml",
-                xml_dir / f"{slide_name}.XML"
+                xml_dir / f"{slide_name}.XML",
             ]
-            
+
             xml_path = None
             for cand in xml_candidates:
                 if cand.exists():
                     xml_path = cand
                     break
-            
+
             if xml_path is None:
                 print(f"⚠️  No XML found for {slide_name} (tried {xml_base_name}), skipping")
                 continue
-            
-            label = int(labels_dict.get(slide_name, 0))
-            slides.append({
-                'slide_id': slide_name,
-                'svs_path': str(svs_path),
-                'xml_path': str(xml_path),
-                'cohort': cohort,
-                'label': label
-            })
-    
+
+            # Labeling rules
+            if slide_name.startswith("Her2Pos_"):
+                label = 1
+            elif slide_name.startswith("Her2Neg_"):
+                label = 0
+            elif slide_name.startswith("TCGA-"):
+                # Use portion before first '.' as key
+                key = slide_name.split(".")[0]
+                label = tcga_map.get(key, 1)  # default 1 if not found per user: others positive
+            else:
+                # All other slides are positive cases
+                label = 1
+
+            slides.append(
+                {
+                    "slide_id": slide_name,
+                    "svs_path": str(svs_path),
+                    "xml_path": str(xml_path),
+                    "cohort": cohort,
+                    "label": int(label),
+                }
+            )
+
     return slides
 
 
@@ -483,169 +329,221 @@ def create_zarr_group(zarr_path: Path, num_patches: int, patch: int) -> zarr.hie
     return root
 
 
-def process_slide(slide_info: dict, patch_size: int, stride: int, level: int,
-                 tissue_threshold: float, downsample_mask: int,
-                 normalizer_params: Optional[Dict], out_dir: Path,
-                 num_workers: int = 4, batch_size: int = 128, skip_existing: bool = True) -> bool:
-    """Process a single slide: extract patches, normalize, and save to Zarr."""
-    
-    slide_id = slide_info['slide_id']
-    svs_path = slide_info['svs_path']
-    xml_path = slide_info['xml_path']
-    label = int(slide_info['label'])
+NORMALIZER_PARAMS_GLOBAL = None
+
+
+def _init_process_pool(normalizer_params):
+    global NORMALIZER_PARAMS_GLOBAL
+    NORMALIZER_PARAMS_GLOBAL = normalizer_params
+
+
+def _process_slide_task(payload):
+    slide_info, shared_kwargs, env_gpu = payload
+    if env_gpu is not None:
+        os.environ["CUDA_VISIBLE_DEVICES"] = env_gpu
+    kwargs = dict(shared_kwargs)
+    kwargs["normalizer_params"] = NORMALIZER_PARAMS_GLOBAL
+    ok = process_slide(slide_info=slide_info, **kwargs)
+    return slide_info["slide_id"], ok
+
+
+def process_slide(
+    slide_info: dict,
+    patch_size: int,
+    stride: int,
+    level: int,
+    tissue_threshold: float,
+    downsample_mask: int,
+    normalizer_params: Optional[Dict],
+    out_dir: Path,
+    num_workers: int = 4,
+    batch_size: int = 128,
+    skip_existing: bool = True,
+    use_gpu: bool = False,
+) -> bool:
+    """Process a single slide: extract patches, optionally stain-normalize, and save to Zarr.
+
+    normalizer_params: dict with keys 'stain_vectors' and 'max_concentrations' or None.
+    """
+
+    slide_id = slide_info["slide_id"]
+    svs_path = slide_info["svs_path"]
+    xml_path = slide_info["xml_path"]
+    label = int(slide_info["label"])
 
     zarr_path = out_dir / f"{slide_id}.zarr"
-    
-    if skip_existing and zarr_path.exists():
-        meta_ok = (zarr_path / 'meta.json').exists()
-        if meta_ok:
-            logging.info(f"Skip existing: {slide_id}")
-            return True
-        else:
-            logging.info(f"Existing zarr missing meta; rewriting: {slide_id}")
+
+    if skip_existing and zarr_path.exists() and (zarr_path / "meta.json").exists():
+        logging.info(f"Skip existing: {slide_id}")
+        return True
 
     slide = None
     try:
-        # Open slide
         slide = openslide.OpenSlide(svs_path)
         W, H = slide.level_dimensions[0]
-        
-        # Parse XML polygons and create mask
+
+        # XML → polygons → mask
         polygons = parse_xml_polygons(xml_path)
-        if len(polygons) == 0:
+        if not polygons:
             logging.warning(f"No polygons in XML for {slide_id}; skipping")
             slide.close()
             return False
-        
+
         mask = polygons_to_mask(polygons, (W, H), downsample=downsample_mask)
-        del polygons  # Free memory
-        
-        # Generate grid centers
+        del polygons
+
+        # Grid of centers at level 0
         centers = generate_grid_centers((W, H), patch_size, stride)
-        
-        # Filter centers inside mask
         ds = downsample_mask
-        valid_centers = [(x, y) for (x, y) in centers 
-                        if mask[min(H // ds - 1, y // ds), min(W // ds - 1, x // ds)]]
-        del centers, mask  # Free memory
-        
-        if len(valid_centers) == 0:
+        valid_centers = [
+            (x, y)
+            for (x, y) in centers
+            if mask[min(H // ds - 1, y // ds), min(W // ds - 1, x // ds)]
+        ]
+        del centers, mask
+
+        if not valid_centers:
             logging.warning(f"No valid centers after masking for {slide_id}; skipping")
             slide.close()
             return False
 
-        # Create normalizer if params available
-        normalizer = None
+        # Prepare stain normalizer for this slide if params and implementation available
+        macenko = None
         V_ref = None
         ref_max = None
-        
-        if normalizer_params is not None:
-            normalizer = MacenkoNormalizer(
-                percentiles=normalizer_params.get('percentiles', (1, 99)),
-                use_gpu=normalizer_params.get('use_gpu', False)
-            )
-            V_ref = normalizer_params['stain_vectors']
-            ref_max = normalizer_params['max_concentrations']
+        if normalizer_params is not None and MacenkoNormalizer is not None:
+            V_ref = normalizer_params["stain_vectors"]
+            ref_max = normalizer_params["max_concentrations"]
+            macenko = MacenkoNormalizer(use_gpu=use_gpu)
+            logging.info("Slide %s: initializing MacenkoNormalizer (GPU=%s)", slide_id, use_gpu)
 
         # Pre-create zarr arrays
         z = create_zarr_group(zarr_path, len(valid_centers), patch_size)
 
-        # Extract metadata
+        # Metadata from slide
         mpp_x = slide.properties.get(openslide.PROPERTY_NAME_MPP_X)
         mpp_y = slide.properties.get(openslide.PROPERTY_NAME_MPP_Y)
         try:
-            magnification = float(slide.properties.get('aperio.AppMag') or 
-                                slide.properties.get('openslide.objective-power') or 0)
+            magnification = float(
+                slide.properties.get("aperio.AppMag")
+                or slide.properties.get("openslide.objective-power")
+                or 0
+            )
         except Exception:
             magnification = None
 
-        # Worker function for parallel patch extraction
-        def read_and_process(idx_center_pair):
-            idx, (cx, cy) = idx_center_pair
+        def read_patch(idx_center_pair):
+            """Read patch from slide, apply quick tissue filter only."""
+            _, (cx, cy) = idx_center_pair
             x0 = cx - patch_size // 2
             y0 = cy - patch_size // 2
-            
-            # Read region (returns RGBA)
+
             region = slide.read_region((x0, y0), level, (patch_size, patch_size))
             try:
-                region = region.convert('RGB')
-                patch = np.array(region)
+                patch = np.array(region.convert("RGB"))
             finally:
                 region.close()
-            
-            # Quick tissue filter
-            if tissue_threshold > 0:
-                if tissue_fraction_rgb(patch) < tissue_threshold:
-                    return idx, None, (cx, cy)
-            
-            # Normalize if available
-            if normalizer is not None and V_ref is not None and ref_max is not None:
-                try:
-                    patch = normalizer.normalize(patch, mean_ref_stain_vectors=V_ref,
-                                                mean_ref_max_concentrations_tuple=ref_max)
-                except Exception as e:
-                    logging.debug(f"Norm fail at idx {idx}: {e}")
-            
-            return idx, patch, (cx, cy)
 
-        # Process patches in batches
+            if tissue_threshold > 0 and tissue_fraction_rgb(patch) < tissue_threshold:
+                return None, None, None
+
+            return patch, (cx, cy), label
+
         total = len(valid_centers)
         written = 0
-        
+        normalized_patches_count = 0
+
         with ThreadPoolExecutor(max_workers=num_workers) as ex:
-            for start in tqdm(range(0, total, batch_size), total=math.ceil(total / batch_size),
-                            desc=f"{slide_id}", leave=False):
+            for start in tqdm(
+                range(0, total, batch_size),
+                total=math.ceil(total / batch_size),
+                desc=f"{slide_id}",
+                leave=False,
+            ):
                 end = min(start + batch_size, total)
-                futures = [ex.submit(read_and_process, (i, valid_centers[i])) for i in range(start, end)]
-                
+                futures = [
+                    ex.submit(read_patch, (i, valid_centers[i])) for i in range(start, end)
+                ]
+
+                batch_patches: List[np.ndarray] = []
+                batch_coords: List[Tuple[int, int]] = []
+                batch_labels: List[int] = []
+
                 for fut in as_completed(futures):
-                    idx, patch, coord = fut.result()
+                    patch, coord, lbl = fut.result()
                     if patch is None:
                         continue
-                    
-                    # Write to zarr
-                    z['patches'][written] = patch
-                    z['coords'][written] = coord
-                    z['labels'][written] = label
-                    written += 1
-                
-                # Free GPU pools per batch
-                if normalizer is not None and normalizer.use_gpu:
-                    normalizer._cleanup_gpu()
-                
+                    batch_patches.append(patch)
+                    batch_coords.append(coord)
+                    batch_labels.append(lbl)
+
+                if not batch_patches:
+                    continue
+
+                # Stain normalization (CPU/GPU handled inside MacenkoNormalizer)
+                if macenko is not None and V_ref is not None and ref_max is not None:
+                    norm_patches = []
+                    for p in batch_patches:
+                        try:
+                            p_norm = macenko.normalize(
+                                p,
+                                mean_ref_stain_vectors=V_ref,
+                                mean_ref_max_concentrations_tuple=ref_max,
+                            )
+                            norm_patches.append(p_norm)
+                            normalized_patches_count += 1
+                        except Exception as e:
+                            logging.debug(f"Normalization failed for slide {slide_id}: {e}")
+                            norm_patches.append(p)
+                    batch_patches = norm_patches
+
+                # Write batch
+                n = len(batch_patches)
+                if n > 0:
+                    z["patches"][written : written + n] = np.stack(batch_patches, axis=0)
+                    z["coords"][written : written + n] = np.asarray(batch_coords, dtype=np.int32)
+                    z["labels"][written : written + n] = np.asarray(batch_labels, dtype=np.int8)
+                    written += n
+
+                del batch_patches, batch_coords, batch_labels
                 gc.collect()
 
-        # Resize datasets to actual written size
+        # Resize datasets down to actual number written
         try:
-            z['patches'].resize((written, patch_size, patch_size, 3))
-            z['coords'].resize((written, 2))
-            z['labels'].resize((written,))
+            z["patches"].resize((written, patch_size, patch_size, 3))
+            z["coords"].resize((written, 2))
+            z["labels"].resize((written,))
         except Exception as e:
             logging.debug(f"Resize failed for {slide_id}: {e}")
 
-        # Write metadata
         meta = {
-            'slide_id': slide_id,
-            'label': label,
-            'num_patches': int(written),
-            'mpp_x': float(mpp_x) if mpp_x else None,
-            'mpp_y': float(mpp_y) if mpp_y else None,
-            'magnification': magnification,
-            'patch_size': patch_size,
-            'stride': stride,
-            'level': level
+            "slide_id": slide_id,
+            "label": label,
+            "num_patches": int(written),
+            "mpp_x": float(mpp_x) if mpp_x else None,
+            "mpp_y": float(mpp_y) if mpp_y else None,
+            "magnification": magnification,
+            "patch_size": patch_size,
+            "stride": stride,
+            "level": level,
+            "stain_normalized": bool(macenko is not None),
         }
-        with open(zarr_path / 'meta.json', 'w') as f:
+        with open(zarr_path / "meta.json", "w") as f:
             json.dump(meta, f, indent=2)
 
+        logging.info(
+            "Slide %s: normalized %d/%d patches (GPU=%s)",
+            slide_id,
+            normalized_patches_count,
+            int(written),
+            use_gpu and (macenko is not None),
+        )
+
         slide.close()
-        
-        # Final cleanup for this slide
-        del valid_centers, z, normalizer
+        del valid_centers, z, macenko, V_ref, ref_max
         gc.collect()
-        
         return True
-        
+
     except Exception as e:
         logging.error(f"Exception processing slide {slide_id}: {e}", exc_info=True)
         if slide is not None:
@@ -653,7 +551,119 @@ def process_slide(slide_info: dict, patch_size: int, stride: int, level: int,
                 slide.close()
             except Exception:
                 pass
+        gc.collect()
         return False
+
+
+def sample_reference_patches_from_slide(
+    slide_info: Dict,
+    patch_size: int,
+    patches_per_slide: int,
+    downsample_mask: int,
+    tissue_threshold: float = 0.0,
+) -> List[np.ndarray]:
+    """Sample a limited number of patches from a slide (entire-slide sampling)."""
+    patches: List[np.ndarray] = []
+    slide = None
+    try:
+        slide = openslide.OpenSlide(slide_info["svs_path"])
+        W, H = slide.level_dimensions[0]
+        polygons = parse_xml_polygons(slide_info["xml_path"])
+        if not polygons:
+            return patches
+        mask = polygons_to_mask(polygons, (W, H), downsample=downsample_mask)
+        coords = np.argwhere(mask)
+        if coords.size == 0:
+            return patches
+        rng = np.random.default_rng()
+        count = min(patches_per_slide, coords.shape[0])
+        replace = coords.shape[0] < patches_per_slide
+        idx = rng.choice(coords.shape[0], size=count, replace=replace)
+        selected = coords[idx]
+        half = patch_size // 2
+        for (y_ds, x_ds) in selected:
+            xc = int((x_ds + 0.5) * downsample_mask)
+            yc = int((y_ds + 0.5) * downsample_mask)
+            xc = min(max(xc, half), W - half)
+            yc = min(max(yc, half), H - half)
+            region = slide.read_region((xc - half, yc - half), 0, (patch_size, patch_size))
+            try:
+                patch = np.array(region.convert("RGB"))
+            finally:
+                region.close()
+            if tissue_threshold > 0 and tissue_fraction_rgb(patch) < tissue_threshold:
+                continue
+            patches.append(patch)
+            if len(patches) >= patches_per_slide:
+                break
+    except Exception as exc:
+        logging.debug(f"Reference sampling failed for {slide_info['slide_id']}: {exc}")
+    finally:
+        if slide is not None:
+            slide.close()
+    return patches
+
+
+def compute_reference_stats_from_slides(
+    data_root: Path,
+    cohorts: List[str],
+    num_slides: int,
+    patches_per_slide: int,
+    patch_size: int,
+    downsample_mask: int,
+    use_gpu: bool,
+    output_path: Path,
+):
+    """Compute reference stats by sampling patches directly from whole slides."""
+    if MacenkoNormalizer is None:
+        logging.error("MacenkoNormalizer unavailable; cannot compute reference stats")
+        return
+    slides = discover_slides(str(data_root), cohorts)
+    if not slides:
+        logging.error("No slides discovered for reference stats.")
+        return
+    random.seed(42)
+    random.shuffle(slides)
+    sampled_slides = slides[: max(1, min(num_slides, len(slides)))]
+    total_target = max(1, len(sampled_slides) * patches_per_slide)
+    logging.info(
+        "Sampling reference patches from %d slides (%d per slide, patch=%d)",
+        len(sampled_slides),
+        patches_per_slide,
+        patch_size,
+    )
+    all_reference_images: List[np.ndarray] = []
+    for slide_info in tqdm(sampled_slides, desc="Reference slides"):
+        patches = sample_reference_patches_from_slide(
+            slide_info,
+            patch_size=patch_size,
+            patches_per_slide=patches_per_slide,
+            downsample_mask=downsample_mask,
+        )
+        if not patches:
+            continue
+        all_reference_images.extend(patches)
+        del patches
+        if len(all_reference_images) >= total_target:
+            break
+        if len(all_reference_images) % 100 == 0:
+            gc.collect()
+    logging.info("Collected %d reference patches", len(all_reference_images))
+    if not all_reference_images:
+        logging.error("No reference patches collected; cannot compute stats")
+        return
+    normalizer = MacenkoNormalizer(use_gpu=use_gpu, percentiles=(1, 99))
+    mean_V, (mean_max_h, mean_max_e) = normalizer.get_mean_reference_stain_characteristics(all_reference_images)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    np.savez(output_path, stain_vectors=mean_V, max_h=mean_max_h, max_e=mean_max_e)
+    logging.info(
+        "Reference stats saved to %s | Max H: %.4f Max E: %.4f",
+        output_path,
+        mean_max_h,
+        mean_max_e,
+    )
+    del all_reference_images, mean_V, normalizer
+    gc.collect()
 
 
 def create_train_val_split(zarr_output_dir: Path, outputs_root: Path):
@@ -701,6 +711,54 @@ def create_train_val_split(zarr_output_dir: Path, outputs_root: Path):
     print(f"✓ Val manifest saved: {val_manifest_path}")
 
 
+def load_processed_slides_log(log_path: Path) -> set:
+    """Load set of slide_ids that have been marked as processed in a CSV log.
+
+    The CSV has at least a 'slide_id' column. If the file doesn't exist, returns an empty set.
+    This log is independent of Macenko on/off; if a slide_id is present, it is considered processed.
+    """
+    processed = set()
+    if not log_path.exists():
+        return processed
+    try:
+        with log_path.open("r", newline="") as f:
+            reader = csv.DictReader(f)
+            if "slide_id" not in reader.fieldnames:
+                return processed
+            for row in reader:
+                sid = row.get("slide_id")
+                if sid:
+                    processed.add(str(sid))
+    except Exception as e:
+        logging.warning("Could not read processed slides log %s: %s", log_path, e)
+    return processed
+
+
+def append_processed_slide(log_path: Path, slide_info: Dict):
+    """Append a single slide entry to the processed-slides CSV log.
+
+    Columns: slide_id, cohort, label.
+    Creates the file with header if it does not exist.
+    """
+    log_path.parent.mkdir(parents=True, exist_ok=True)
+    file_exists = log_path.exists()
+    try:
+        with log_path.open("a", newline="") as f:
+            fieldnames = ["slide_id", "cohort", "label"]
+            writer = csv.DictWriter(f, fieldnames=fieldnames)
+            if not file_exists:
+                writer.writeheader()
+            writer.writerow(
+                {
+                    "slide_id": slide_info.get("slide_id"),
+                    "cohort": slide_info.get("cohort"),
+                    "label": slide_info.get("label"),
+                }
+            )
+    except Exception as e:
+        logging.warning("Failed to append to processed slides log %s: %s", log_path, e)
+
+
 def main():
     parser = argparse.ArgumentParser(description="HER2 Slide Preprocessing CLI")
     
@@ -712,9 +770,12 @@ def main():
     
     # Reference stats
     parser.add_argument('--ref-stats-path', type=str, default=None, help='Path to reference stain stats npz file')
-    parser.add_argument('--num-ref-subfolders', type=int, default=100, help='Number of random subfolders to sample for reference')
-    parser.add_argument('--images-per-folder', type=int, default=200, help='Max images per sampled subfolder')
-    
+    parser.add_argument('--num-ref-subfolders', type=int, default=100, help='Number of random subfolders to sample for reference (patch mode)')
+    parser.add_argument('--images-per-folder', type=int, default=200, help='Max images per sampled subfolder (patch mode)')
+    parser.add_argument('--ref-mode', type=str, choices=['patches', 'slides'], default='patches', help='How to compute reference stats: patches (legacy) or slides (sample patches directly from SVS)')
+    parser.add_argument('--ref-slides', type=int, default=40, help='Number of slides to sample for reference stats when --ref-mode=slides')
+    parser.add_argument('--ref-patches-per-slide', type=int, default=50, help='Number of patches sampled per slide for reference stats when --ref-mode=slides')
+
     # Patch extraction
     parser.add_argument('--patch-size', type=int, default=512, help='Patch size')
     parser.add_argument('--stride', type=int, default=512, help='Patch stride (no overlap if equals patch size)')
@@ -727,7 +788,12 @@ def main():
     parser.add_argument('--batch-size', type=int, default=128, help='Patches per batch')
     parser.add_argument('--use-gpu', action='store_true', help='Use GPU acceleration for Macenko normalization')
     parser.add_argument('--skip-existing', action='store_true', help='Skip existing Zarr files')
-    
+    parser.add_argument('--disable-macenko', action='store_true', help='Force-disable Macenko stain normalization even if reference stats exist')
+    parser.add_argument('--slide-fraction', type=float, default=1.0, help='Fraction of discovered slides to process (0-1], default 1.0')
+    parser.add_argument('--slide-fraction-seed', type=int, default=42, help='Random seed used when subsampling slides via --slide-fraction')
+    parser.add_argument('--slide-workers', type=int, default=1, help='Number of processes for slide-level parallelism (>=1)')
+    parser.add_argument('--slide-worker-gpus', type=str, default=None, help='Comma-separated GPU ids to assign per slide worker (e.g., "0,1,2"). Only used when --slide-workers > 1.')
+
     # Dataset
     parser.add_argument('--cohorts', type=str, nargs='+', 
                        default=['TCGA_BRCA_Filtered', 'Yale_HER2_cohort', 'Yale_trastuzumab_response_cohort'],
@@ -737,7 +803,8 @@ def main():
     parser.add_argument('--compute-ref-stats', action='store_true', help='Compute reference stain statistics')
     parser.add_argument('--process-slides', action='store_true', help='Process slides to Zarr')
     parser.add_argument('--create-split', action='store_true', help='Create train/val split manifest')
-    
+    parser.add_argument('--ref-data-root', type=str, default=None, help='Alternative data root for reference stat computation when --ref-mode=slides (defaults to --data-root)')
+
     args = parser.parse_args()
     
     # Setup logging
@@ -776,105 +843,198 @@ def main():
     
     # Compute reference statistics if requested
     if args.compute_ref_stats:
-        if args.patches_root is None:
-            logging.error("--patches-root required for --compute-ref-stats")
-            return
-        
-        patches_root = Path(args.patches_root)
-        if not patches_root.exists():
-            logging.error(f"Patches root not found: {patches_root}")
-            return
-        
-        compute_reference_stats(patches_root, args.num_ref_subfolders, args.images_per_folder,
-                              args.use_gpu, ref_stats_path)
-    
-    # Load reference parameters
-    normalizer_params = load_reference_stain_params(ref_stats_path, use_gpu=args.use_gpu)
-    if normalizer_params is None:
-        logging.warning("⚠️  Reference stain parameters not loaded! Patches will NOT be stain normalized.")
+        if args.ref_mode == 'patches':
+            if args.patches_root is None:
+                logging.error("--patches-root required for ref_mode=patches")
+                return
+            patches_root = Path(args.patches_root)
+            if not patches_root.exists():
+                logging.error(f"Patches root not found: {patches_root}")
+                return
+            compute_reference_stats_from_patches(
+                patches_root,
+                args.num_ref_subfolders,
+                args.images_per_folder,
+                args.use_gpu,
+                ref_stats_path,
+            )
+        else:
+            ref_data_root = Path(args.ref_data_root) if args.ref_data_root else Path(args.data_root)
+            if not ref_data_root.exists():
+                logging.error(f"Reference data root not found: {ref_data_root}")
+                return
+            compute_reference_stats_from_slides(
+                data_root=ref_data_root,
+                cohorts=args.cohorts,
+                num_slides=args.ref_slides,
+                patches_per_slide=args.ref_patches_per_slide,
+                patch_size=args.patch_size,
+                downsample_mask=args.downsample_mask,
+                use_gpu=args.use_gpu,
+                output_path=ref_stats_path,
+            )
+
+    if args.disable_macenko:
+        logging.info("Macenko stain normalization DISABLED via --disable-macenko")
+        normalizer_params = None
     else:
-        logging.info("✓ Loaded reference stain parameters")
-        logging.info(f"  Max H: {normalizer_params['max_concentrations'][0]:.4f}")
-        logging.info(f"  Max E: {normalizer_params['max_concentrations'][1]:.4f}")
-    
+        normalizer_params = load_reference_stain_params(ref_stats_path)
+        if normalizer_params is None:
+            logging.warning(
+                "⚠️  Reference stain parameters not loaded! Patches will NOT be stain normalized."
+            )
+        else:
+            logging.info("✓ Loaded reference stain parameters")
+            logging.info(
+                f"  Max H: {normalizer_params['max_concentrations'][0]:.4f}, "
+                f"Max E: {normalizer_params['max_concentrations'][1]:.4f}"
+            )
+            logging.info("Macenko stain normalization ENABLED (GPU=%s)", args.use_gpu)
+
     # Process slides if requested
     if args.process_slides:
-        # Discover slides
         slides = discover_slides(args.data_root, args.cohorts)
-        logging.info(f"\n✓ Discovered {len(slides)} slides across {len(args.cohorts)} cohorts")
-        
-        # Cohort breakdown
+        logging.info(
+            f"\n✓ Discovered {len(slides)} slides across {len(args.cohorts)} cohorts"
+        )
         for cohort in args.cohorts:
-            count = sum(1 for s in slides if s['cohort'] == cohort)
+            count = sum(1 for s in slides if s["cohort"] == cohort)
             logging.info(f"  {cohort}: {count} slides")
-        
-        # Label distribution
+
         if slides:
-            labels = [s['label'] for s in slides]
-            logging.info(f"Label distribution: HER2- (0): {sum(1 for l in labels if l == 0)}, "
-                       f"HER2+ (1): {sum(1 for l in labels if l == 1)}")
-        
-        # Process slides
-        logging.info("\nStarting slide processing...")
-        successful = 0
-        failed = 0
-        skipped = 0
-        failed_slides = []
-        
-        for slide_info in tqdm(slides, desc="Processing slides"):
-            zarr_path = zarr_output_dir / f"{slide_info['slide_id']}.zarr"
-            if args.skip_existing and zarr_path.exists() and (zarr_path / 'meta.json').exists():
-                skipped += 1
-                continue
-            
-            ok = process_slide(
-                slide_info=slide_info,
-                patch_size=args.patch_size,
-                stride=args.stride,
-                level=args.level,
-                tissue_threshold=args.tissue_threshold,
-                downsample_mask=args.downsample_mask,
-                normalizer_params=normalizer_params,
-                out_dir=zarr_output_dir,
-                num_workers=args.num_workers,
-                batch_size=args.batch_size,
-                skip_existing=args.skip_existing,
+            labels = [s["label"] for s in slides]
+            logging.info(
+                "Label distribution: HER2- (0): %d, HER2+ (1): %d",
+                sum(1 for l in labels if l == 0),
+                sum(1 for l in labels if l == 1),
             )
-            
-            if ok:
-                successful += 1
-            else:
-                failed += 1
-                failed_slides.append(slide_info['slide_id'])
-            
-            # Periodic cleanup every 3 slides
-            if (successful + failed) % 3 == 0:
-                gc.collect()
-                if args.use_gpu:
-                    try:
-                        import cupy as cp
-                        cp.get_default_memory_pool().free_all_blocks()
-                        cp.get_default_pinned_memory_pool().free_all_blocks()
-                    except Exception:
-                        pass
-        
-        logging.info(f"\n{'='*60}")
+
+        # Load processed-slides CSV log (independent of Macenko flag)
+        processed_log_path = Path(args.outputs_root) / "preprocessing" / "processed_slides.csv"
+        processed_slides = load_processed_slides_log(processed_log_path)
+        if processed_slides:
+            logging.info("Loaded %d previously processed slides from %s", len(processed_slides), processed_log_path)
+
+        # Subsample slides if fraction < 1.0
+        slide_fraction = max(0.0, min(1.0, args.slide_fraction))
+        if slide_fraction <= 0:
+            logging.warning("Slide fraction <= 0; nothing to process.")
+            slides = []
+        elif slide_fraction < 1.0 and slides:
+            random.seed(args.slide_fraction_seed)
+            sample_size = max(1, int(round(len(slides) * slide_fraction)))
+            sample_size = min(sample_size, len(slides))
+            slides = random.sample(slides, sample_size)
+            logging.info(f"✓ Subsampled to {len(slides)} slides ({slide_fraction*100:.1f}%)")
+
+        logging.info("\nStarting slide processing...")
+        successful = failed = skipped = 0
+        failed_slides: List[str] = []
+
+        slide_worker_count = max(1, args.slide_workers)
+        gpu_ids = []
+        if args.slide_worker_gpus:
+            gpu_ids = [g.strip() for g in args.slide_worker_gpus.split(',') if g.strip()]
+        gpu_assign = []
+        if gpu_ids:
+            for idx in range(slide_worker_count):
+                gpu_assign.append(gpu_ids[idx % len(gpu_ids)])
+
+        shared_kwargs = dict(
+            patch_size=args.patch_size,
+            stride=args.stride,
+            level=args.level,
+            tissue_threshold=args.tissue_threshold,
+            downsample_mask=args.downsample_mask,
+            out_dir=Path(args.zarr_output_dir),
+            num_workers=args.num_workers,
+            batch_size=args.batch_size,
+            skip_existing=args.skip_existing,
+            use_gpu=args.use_gpu,
+        )
+
+        if slide_worker_count == 1:
+            for slide_info in tqdm(slides, desc="Processing slides"):
+                slide_id = slide_info["slide_id"]
+                if slide_id in processed_slides:
+                    skipped += 1
+                    continue
+
+                zarr_path = Path(args.zarr_output_dir) / f"{slide_id}.zarr"
+                if args.skip_existing and zarr_path.exists() and (zarr_path / "meta.json").exists():
+                    skipped += 1
+                    # Also record in CSV log so future runs know it's processed, regardless of Macenko flag
+                    append_processed_slide(processed_log_path, slide_info)
+                    processed_slides.add(slide_id)
+                    continue
+
+                ok = process_slide(
+                    slide_info=slide_info,
+                    normalizer_params=normalizer_params,
+                    **shared_kwargs,
+                )
+
+                if ok:
+                    successful += 1
+                    append_processed_slide(processed_log_path, slide_info)
+                    processed_slides.add(slide_id)
+                else:
+                    failed += 1
+                    failed_slides.append(slide_id)
+
+                if (successful + failed) % 3 == 0:
+                    gc.collect()
+        else:
+            payloads = []
+            for idx, slide_info in enumerate(slides):
+                slide_id = slide_info["slide_id"]
+                if slide_id in processed_slides:
+                    skipped += 1
+                    continue
+
+                zarr_path = Path(args.zarr_output_dir) / f"{slide_id}.zarr"
+                if args.skip_existing and zarr_path.exists() and (zarr_path / "meta.json").exists():
+                    skipped += 1
+                    append_processed_slide(processed_log_path, slide_info)
+                    processed_slides.add(slide_id)
+                    continue
+
+                env_gpu = gpu_assign[idx % len(gpu_assign)] if gpu_assign else None
+                payloads.append((slide_info, shared_kwargs, env_gpu))
+
+            with ProcessPoolExecutor(max_workers=slide_worker_count, initializer=_init_process_pool, initargs=(normalizer_params,)) as pool:
+                futures = [pool.submit(_process_slide_task, payload) for payload in payloads]
+
+                for fut in tqdm(as_completed(futures), total=len(futures), desc="Slides (mp)"):
+                    slide_id, ok = fut.result()
+                    if ok:
+                        successful += 1
+                        # In mp mode we only know slide_id, so synthesize a minimal info dict
+                        append_processed_slide(processed_log_path, {"slide_id": slide_id, "cohort": "", "label": ""})
+                        processed_slides.add(slide_id)
+                    else:
+                        failed += 1
+                        failed_slides.append(slide_id)
+
+        logging.info("\n" + "=" * 60)
         logging.info("Processing complete!")
         logging.info(f"  Successful: {successful}")
         logging.info(f"  Failed: {failed}")
-        logging.info(f"  Skipped (existing): {skipped}")
-        logging.info(f"  Total: {len(slides)}")
+        logging.info(f"  Skipped (existing or logged): {skipped}")
+        logging.info(f"  Total considered: {len(slides)}")
         if failed_slides:
-            logging.info(f"Failed slides: {', '.join(failed_slides[:10])}{'...' if len(failed_slides) > 10 else ''}")
-        logging.info(f"{'='*60}")
-    
-    # Create train/val split if requested
+            logging.info(
+                "Failed slides: %s",
+                ", ".join(failed_slides[:10])
+                + ("..." if len(failed_slides) > 10 else ""),
+            )
+        logging.info("=" * 60)
+
     if args.create_split:
-        create_train_val_split(zarr_output_dir, outputs_root)
-    
+        create_train_val_split(Path(args.zarr_output_dir), Path(args.outputs_root))
+
     logging.info("\n✅ Preprocessing pipeline complete!")
 
 
 if __name__ == "__main__":
     main()
-

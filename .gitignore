@@ -15,6 +15,7 @@
 *.xlsx
 *.log
 *.csv
+*.zarr
 
 data/
 __pycache__/
