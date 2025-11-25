@@ -1,12 +1,16 @@
+#!/usr/bin/env python3
 """
 Classification evaluation CLI: metrics (Acc/P/R/F1/AUROC), confusion matrix, TP/FN/FP/TN, fairness.
-Usage: python -m inference.cli.evaluate_imagefolder --model-path model.pth --data-dir test/ --arch resnet18 --output-dir results/
+Usage: 
+    python evaluate_imagefolder.py --model-path model.pth --data-dir test/ --arch resnet18 --output-dir results/
+    python -m inference.cli.evaluate_imagefolder --model-path model.pth --data-dir test/ --arch resnet18 --output-dir results/
 """
 from __future__ import annotations
 
 import argparse
 import json
 import os
+import sys
 from pathlib import Path
 from typing import List, Optional, Tuple
 
@@ -16,8 +20,21 @@ import torch
 from torch.utils.data import DataLoader
 from torchvision import datasets, transforms
 
+# Add project root to path for imports
+_script_dir = Path(__file__).resolve().parent
+_project_root = _script_dir.parent.parent
+if str(_project_root) not in sys.path:
+    sys.path.insert(0, str(_project_root))
+
 from inference.shared.load_model import load_classification_model
-from src.utils.metric import classification_metrics, confusion_matrix_and_counts, group_metrics, multiclass_auroc, write_confusion_matrix_csv, write_counts_csv
+from src.utils.metric import (
+    classification_metrics,
+    confusion_matrix_and_counts,
+    group_metrics,
+    multiclass_auroc,
+    write_confusion_matrix_csv,
+    write_counts_csv,
+)
 
 IMAGENET_MEAN, IMAGENET_STD = [0.485, 0.456, 0.406], [0.229, 0.224, 0.225]
 

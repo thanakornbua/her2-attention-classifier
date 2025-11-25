@@ -25,7 +25,7 @@ import zarr
 from PIL import Image
 from sklearn.metrics import roc_auc_score
 from torch.cuda import amp
-from torch.utils.data import DataLoader, Dataset
+from torch.utils.data import DataLoader, Dataset, WeightedRandomSampler
 from torch.utils.tensorboard import SummaryWriter
 from tqdm.auto import tqdm
 
@@ -122,6 +122,13 @@ class SimpleZarrPatchDataset(Dataset):
 
     def __len__(self) -> int:
         return len(self.indices)
+    
+    def get_labels(self) -> np.ndarray:
+        """Return labels for all samples in the dataset."""
+        labels = np.zeros(len(self.indices), dtype=np.int64)
+        for i, (row_idx, _) in enumerate(self.indices):
+            labels[i] = int(self._metadata.iloc[row_idx]["label"])
+        return labels
 
     def _get_zarr(self, path: str) -> zarr.hierarchy.Group:
         if path not in self._zarr_cache:
@@ -354,10 +361,25 @@ def run_training(args):
         seed=args.seed,
     )
 
+    # Compute class weights for oversampling
+    train_labels = train_ds.get_labels()
+    class_counts = np.bincount(train_labels)
+    class_weights = 1.0 / class_counts
+    sample_weights = class_weights[train_labels]
+    sampler = WeightedRandomSampler(
+        weights=sample_weights,
+        num_samples=len(sample_weights),
+        replacement=True
+    )
+    
+    print(f"Class distribution in training set:")
+    for cls_idx, count in enumerate(class_counts):
+        print(f"  Class {cls_idx}: {count} samples (weight: {class_weights[cls_idx]:.4f})")
+
     train_loader = DataLoader(
         train_ds,
         batch_size=args.batch_size,
-        shuffle=True,
+        sampler=sampler,  # Use weighted sampler instead of shuffle=True
         num_workers=args.num_workers,
         pin_memory=True,
         drop_last=True,

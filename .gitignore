@@ -17,6 +17,7 @@
 *.csv
 *.zarr
 *.env
+*.pth
 
 data/
 __pycache__/
