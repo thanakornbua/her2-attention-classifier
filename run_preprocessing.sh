@@ -6,6 +6,8 @@
 DATA_ROOT="/home/thanakornbuath/hdd/her2-attention-classifier/data"
 OUTPUTS_ROOT="/media/thanakornbuath/data SSD/her2-attention-classifier/outputs"
 ZARR_OUTPUT_DIR="/media/thanakornbuath/data SSD/her2-attention-classifier/zarr_raw"
+ZARR_NORM_OUTPUT_DIR="/media/thanakornbuath/data SSD/her2-attention-classifier/zarr_norm"
+TRAIN_OUTPUT_DIR="$OUTPUTS_ROOT/phase1_training"
 PATCHES_ROOT="/home/thanakornbuath/hdd/her2-attention-classifier/outputs/patches"
 
 # Parameters
@@ -20,11 +22,28 @@ REF_MODE="slides"            # or "patches"
 REF_SLIDES=200                 # used when REF_MODE=slides
 REF_PATCHES_PER_SLIDE=100      # used when REF_MODE=slides
 REF_DATA_ROOT="$DATA_ROOT"   # override if reference slides live elsewhere
-SLIDE_FRACTION=0.8            # fraction of slides to process (0-1]
+SLIDE_FRACTION=1            # fraction of slides to process (0-1]
 SLIDE_FRACTION_SEED=42
 SLIDE_WORKERS=1
 SLIDE_WORKER_GPUS=""        # e.g. "0,1" when SLIDE_WORKERS>1
-DISABLE_MACENKO=1             # set to 1 to skip stain normalization entirely
+DISABLE_MACENKO=0             # set to 1 to skip stain normalization entirely
+RUN_TRAINING=1                # set to 0 to skip the training phase
+
+# Training parameters
+TRAIN_MODEL="resnet50"
+TRAIN_EPOCHS=2
+TRAIN_BATCH_SIZE=32
+TRAIN_LR=1e-4
+TRAIN_WEIGHT_DECAY=1e-5
+TRAIN_STEPS_PER_EPOCH=200
+VAL_STEPS=50
+TRAIN_MAX_PATCHES=2048
+TRAIN_NUM_WORKERS=8
+TRAIN_ROTATION_DEGREES=15
+TRAIN_ELASTIC_ALPHA=2.0
+TRAIN_ELASTIC_SIGMA=5.0
+TRAIN_ELASTIC_PROB=0.6
+TRAIN_ELASTIC_KERNEL=15
 
 # GPU flag (comment out if no GPU)
 GPU_FLAG="--use-gpu"
@@ -99,6 +118,10 @@ python preprocess_slides_cli.py \
     --data-root "$DATA_ROOT" \
     --outputs-root "$OUTPUTS_ROOT" \
     --zarr-output-dir "$ZARR_OUTPUT_DIR" \
+    --mixed-raw-output-dir "$ZARR_OUTPUT_DIR" \
+    --mixed-norm-output-dir "$ZARR_NORM_OUTPUT_DIR" \
+    --mixed-norm-fraction 0.2 \
+    --mixed-split-seed 123 \
     --process-slides \
     --patch-size $PATCH_SIZE \
     --stride $STRIDE \
@@ -136,12 +159,46 @@ fi
 echo "✓ Train/val split created successfully"
 
 echo ""
+if [ "$RUN_TRAINING" -eq 1 ]; then
+    echo "Step 4: Training phase 1 classifier..."
+    python src/train/train_phase1_zarr.py \
+        --train-manifest "$OUTPUTS_ROOT/zarr_train_manifest.csv" \
+        --val-manifest "$OUTPUTS_ROOT/zarr_val_manifest.csv" \
+        --output-dir "$TRAIN_OUTPUT_DIR" \
+        --model "$TRAIN_MODEL" \
+        --epochs $TRAIN_EPOCHS \
+        --batch-size $TRAIN_BATCH_SIZE \
+        --lr $TRAIN_LR \
+        --weight-decay $TRAIN_WEIGHT_DECAY \
+        --train-steps-per-epoch $TRAIN_STEPS_PER_EPOCH \
+        --val-steps $VAL_STEPS \
+        --max-patches-per-slide $TRAIN_MAX_PATCHES \
+        --num-workers $TRAIN_NUM_WORKERS \
+        --rotation-degrees $TRAIN_ROTATION_DEGREES \
+        --elastic-alpha $TRAIN_ELASTIC_ALPHA \
+        --elastic-sigma $TRAIN_ELASTIC_SIGMA \
+        --elastic-prob $TRAIN_ELASTIC_PROB \
+        --elastic-kernel-size $TRAIN_ELASTIC_KERNEL \
+        --enable-tensorboard
+
+    if [ $? -ne 0 ]; then
+        echo "ERROR: Training phase failed!"
+        exit 1
+    fi
+    echo "✓ Training completed"
+    echo ""
+fi
+
 echo "=============================================="
 echo "✅ Preprocessing pipeline completed!"
 echo "=============================================="
 echo ""
 echo "Output files:"
-echo "  - Zarr files: $ZARR_OUTPUT_DIR/*.zarr"
+echo "  - Raw Zarr files: $ZARR_OUTPUT_DIR/*.zarr"
+echo "  - Normalized Zarr files: $ZARR_NORM_OUTPUT_DIR/*.zarr"
+if [ "$RUN_TRAINING" -eq 1 ]; then
+    echo "  - Training artifacts: $TRAIN_OUTPUT_DIR"
+fi
 echo "  - Train manifest: $OUTPUTS_ROOT/zarr_train_manifest.csv"
 echo "  - Val manifest: $OUTPUTS_ROOT/zarr_val_manifest.csv"
 echo "  - Logs: $OUTPUTS_ROOT/logs/preprocess_cli.log"

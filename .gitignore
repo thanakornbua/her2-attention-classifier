@@ -16,6 +16,7 @@
 *.log
 *.csv
 *.zarr
+*.env
 
 data/
 __pycache__/
@@ -23,6 +24,9 @@ __pycache__/
 /outputs/opt_gpu_analyse/
 /outputs/vanil_gpu_analyse/
 /outputs/opt_cpu_analyse/
+/wandb/
+/zarr_raw/
+/zarr_norm/
 
 *.log
 outputs/preprocessing/logs/preprocessing.log

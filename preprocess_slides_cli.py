@@ -759,6 +759,145 @@ def append_processed_slide(log_path: Path, slide_info: Dict):
         logging.warning("Failed to append to processed slides log %s: %s", log_path, e)
 
 
+def _process_subset_slides(
+    subset_name: str,
+    slides: List[Dict],
+    out_dir: Path,
+    normalizer_params,
+    base_kwargs: Dict,
+    slide_worker_count: int,
+    gpu_assign: List[str],
+    processed_log_path: Optional[Path],
+    processed_slides: Optional[set],
+    use_processed_log: bool,
+):
+    """Process a subset of slides with configurable output directory and normalization."""
+    out_dir = Path(out_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    subset_kwargs = dict(base_kwargs)
+    subset_kwargs["out_dir"] = out_dir
+    skip_existing = subset_kwargs.get("skip_existing", False)
+
+    if not slides:
+        logging.info("Subset '%s' has no slides to process.", subset_name)
+        return {
+            "name": subset_name,
+            "successful": 0,
+            "failed": 0,
+            "skipped": 0,
+            "considered": 0,
+            "failed_slides": [],
+        }
+
+    logging.info(
+        "\n--- Subset '%s': %d slides → %s (normalizer=%s)",
+        subset_name,
+        len(slides),
+        out_dir,
+        "enabled" if normalizer_params is not None else "disabled",
+    )
+
+    use_log = use_processed_log and processed_log_path is not None
+    processed_slides = processed_slides if processed_slides is not None else set()
+
+    successful = failed = skipped = 0
+    failed_slides: List[str] = []
+
+    def _should_skip(slide_id: str) -> bool:
+        return use_log and slide_id in processed_slides
+
+    def _mark_processed(info: Dict):
+        if use_log:
+            append_processed_slide(processed_log_path, info)
+            processed_slides.add(info["slide_id"])
+
+    subset_desc = f"{subset_name} slides"
+
+    if slide_worker_count == 1:
+        for slide_info in tqdm(slides, desc=subset_desc):
+            slide_id = slide_info["slide_id"]
+            if _should_skip(slide_id):
+                skipped += 1
+                continue
+
+            zarr_path = out_dir / f"{slide_id}.zarr"
+            if skip_existing and zarr_path.exists() and (zarr_path / "meta.json").exists():
+                skipped += 1
+                _mark_processed(slide_info)
+                continue
+
+            ok = process_slide(
+                slide_info=slide_info,
+                normalizer_params=normalizer_params,
+                **subset_kwargs,
+            )
+
+            if ok:
+                successful += 1
+                _mark_processed(slide_info)
+            else:
+                failed += 1
+                failed_slides.append(slide_id)
+
+            if (successful + failed) % 3 == 0:
+                gc.collect()
+    else:
+        payloads = []
+        for idx, slide_info in enumerate(slides):
+            slide_id = slide_info["slide_id"]
+            if _should_skip(slide_id):
+                skipped += 1
+                continue
+
+            zarr_path = out_dir / f"{slide_id}.zarr"
+            if skip_existing and zarr_path.exists() and (zarr_path / "meta.json").exists():
+                skipped += 1
+                _mark_processed(slide_info)
+                continue
+
+            env_gpu = gpu_assign[idx % len(gpu_assign)] if gpu_assign else None
+            payloads.append((slide_info, subset_kwargs, env_gpu))
+
+        with ProcessPoolExecutor(
+            max_workers=slide_worker_count,
+            initializer=_init_process_pool,
+            initargs=(normalizer_params,),
+        ) as pool:
+            futures = [pool.submit(_process_slide_task, payload) for payload in payloads]
+
+            for fut in tqdm(as_completed(futures), total=len(futures), desc=f"{subset_name} (mp)"):
+                slide_id, ok = fut.result()
+                if ok:
+                    successful += 1
+                    if use_log:
+                        append_processed_slide(
+                            processed_log_path,
+                            {"slide_id": slide_id, "cohort": "", "label": ""},
+                        )
+                        processed_slides.add(slide_id)
+                else:
+                    failed += 1
+                    failed_slides.append(slide_id)
+
+    logging.info(
+        "Subset '%s' summary | success=%d failed=%d skipped=%d considered=%d",
+        subset_name,
+        successful,
+        failed,
+        skipped,
+        len(slides),
+    )
+
+    return {
+        "name": subset_name,
+        "successful": successful,
+        "failed": failed,
+        "skipped": skipped,
+        "considered": len(slides),
+        "failed_slides": failed_slides,
+    }
+
+
 def main():
     parser = argparse.ArgumentParser(description="HER2 Slide Preprocessing CLI")
     
@@ -793,6 +932,14 @@ def main():
     parser.add_argument('--slide-fraction-seed', type=int, default=42, help='Random seed used when subsampling slides via --slide-fraction')
     parser.add_argument('--slide-workers', type=int, default=1, help='Number of processes for slide-level parallelism (>=1)')
     parser.add_argument('--slide-worker-gpus', type=str, default=None, help='Comma-separated GPU ids to assign per slide worker (e.g., "0,1,2"). Only used when --slide-workers > 1.')
+    parser.add_argument('--mixed-raw-output-dir', type=str, default=None,
+                        help='If set with --mixed-norm-output-dir, enables mixed preprocessing and writes the raw subset here.')
+    parser.add_argument('--mixed-norm-output-dir', type=str, default=None,
+                        help='If set with --mixed-raw-output-dir, enables mixed preprocessing and writes the normalized subset here.')
+    parser.add_argument('--mixed-norm-fraction', type=float, default=0.2,
+                        help='Fraction of slides routed to the normalized subset when mixed preprocessing is enabled (0-1].')
+    parser.add_argument('--mixed-split-seed', type=int, default=123,
+                        help='Seed used to shuffle slides before splitting into raw/normalized subsets when mixed preprocessing is active.')
 
     # Dataset
     parser.add_argument('--cohorts', type=str, nargs='+', 
@@ -909,11 +1056,21 @@ def main():
                 sum(1 for l in labels if l == 1),
             )
 
-        # Load processed-slides CSV log (independent of Macenko flag)
-        processed_log_path = Path(args.outputs_root) / "preprocessing" / "processed_slides.csv"
-        processed_slides = load_processed_slides_log(processed_log_path)
-        if processed_slides:
-            logging.info("Loaded %d previously processed slides from %s", len(processed_slides), processed_log_path)
+        mixed_raw_dir = Path(args.mixed_raw_output_dir) if args.mixed_raw_output_dir else None
+        mixed_norm_dir = Path(args.mixed_norm_output_dir) if args.mixed_norm_output_dir else None
+        mixed_mode = mixed_raw_dir is not None and mixed_norm_dir is not None
+
+        processed_log_path = None
+        processed_slides: set = set()
+        if not mixed_mode:
+            processed_log_path = Path(args.outputs_root) / "preprocessing" / "processed_slides.csv"
+            processed_slides = load_processed_slides_log(processed_log_path)
+            if processed_slides:
+                logging.info(
+                    "Loaded %d previously processed slides from %s",
+                    len(processed_slides),
+                    processed_log_path,
+                )
 
         # Subsample slides if fraction < 1.0
         slide_fraction = max(0.0, min(1.0, args.slide_fraction))
@@ -928,8 +1085,6 @@ def main():
             logging.info(f"✓ Subsampled to {len(slides)} slides ({slide_fraction*100:.1f}%)")
 
         logging.info("\nStarting slide processing...")
-        successful = failed = skipped = 0
-        failed_slides: List[str] = []
 
         slide_worker_count = max(1, args.slide_workers)
         gpu_ids = []
@@ -940,93 +1095,115 @@ def main():
             for idx in range(slide_worker_count):
                 gpu_assign.append(gpu_ids[idx % len(gpu_ids)])
 
-        shared_kwargs = dict(
+        base_kwargs = dict(
             patch_size=args.patch_size,
             stride=args.stride,
             level=args.level,
             tissue_threshold=args.tissue_threshold,
             downsample_mask=args.downsample_mask,
-            out_dir=Path(args.zarr_output_dir),
             num_workers=args.num_workers,
             batch_size=args.batch_size,
             skip_existing=args.skip_existing,
             use_gpu=args.use_gpu,
         )
 
-        if slide_worker_count == 1:
-            for slide_info in tqdm(slides, desc="Processing slides"):
-                slide_id = slide_info["slide_id"]
-                if slide_id in processed_slides:
-                    skipped += 1
-                    continue
+        subset_jobs = []
+        if mixed_mode:
+            slides_for_split = slides.copy()
+            if slides_for_split:
+                random.seed(args.mixed_split_seed)
+                random.shuffle(slides_for_split)
+            norm_fraction = max(0.0, min(1.0, args.mixed_norm_fraction))
+            if not slides_for_split:
+                raw_subset = []
+                norm_subset = []
+            elif norm_fraction <= 0.0:
+                raw_subset = slides_for_split
+                norm_subset = []
+            elif norm_fraction >= 1.0:
+                raw_subset = []
+                norm_subset = slides_for_split
+            else:
+                norm_count = max(1, int(round(len(slides_for_split) * norm_fraction)))
+                norm_count = min(norm_count, len(slides_for_split))
+                norm_subset = slides_for_split[:norm_count]
+                raw_subset = slides_for_split[norm_count:]
 
-                zarr_path = Path(args.zarr_output_dir) / f"{slide_id}.zarr"
-                if args.skip_existing and zarr_path.exists() and (zarr_path / "meta.json").exists():
-                    skipped += 1
-                    # Also record in CSV log so future runs know it's processed, regardless of Macenko flag
-                    append_processed_slide(processed_log_path, slide_info)
-                    processed_slides.add(slide_id)
-                    continue
-
-                ok = process_slide(
-                    slide_info=slide_info,
-                    normalizer_params=normalizer_params,
-                    **shared_kwargs,
+            logging.info(
+                "Mixed preprocessing enabled: %d raw slides → %s | %d normalized slides → %s",
+                len(raw_subset),
+                mixed_raw_dir,
+                len(norm_subset),
+                mixed_norm_dir,
+            )
+            if norm_subset and normalizer_params is None:
+                logging.warning(
+                    "Mixed mode requested but reference stats not available; 'normalized' subset will be stored as raw patches."
                 )
 
-                if ok:
-                    successful += 1
-                    append_processed_slide(processed_log_path, slide_info)
-                    processed_slides.add(slide_id)
-                else:
-                    failed += 1
-                    failed_slides.append(slide_id)
-
-                if (successful + failed) % 3 == 0:
-                    gc.collect()
+            subset_jobs.append(
+                {
+                    "name": "raw",
+                    "slides": raw_subset,
+                    "out_dir": mixed_raw_dir,
+                    "normalizer_params": None,
+                    "use_processed_log": False,
+                }
+            )
+            subset_jobs.append(
+                {
+                    "name": "normalized",
+                    "slides": norm_subset,
+                    "out_dir": mixed_norm_dir,
+                    "normalizer_params": normalizer_params,
+                    "use_processed_log": False,
+                }
+            )
         else:
-            payloads = []
-            for idx, slide_info in enumerate(slides):
-                slide_id = slide_info["slide_id"]
-                if slide_id in processed_slides:
-                    skipped += 1
-                    continue
+            subset_jobs.append(
+                {
+                    "name": "default",
+                    "slides": slides,
+                    "out_dir": Path(args.zarr_output_dir),
+                    "normalizer_params": normalizer_params,
+                    "use_processed_log": True,
+                }
+            )
 
-                zarr_path = Path(args.zarr_output_dir) / f"{slide_id}.zarr"
-                if args.skip_existing and zarr_path.exists() and (zarr_path / "meta.json").exists():
-                    skipped += 1
-                    append_processed_slide(processed_log_path, slide_info)
-                    processed_slides.add(slide_id)
-                    continue
+        overall_stats = []
+        for job in subset_jobs:
+            stats = _process_subset_slides(
+                subset_name=job["name"],
+                slides=job["slides"],
+                out_dir=job["out_dir"],
+                normalizer_params=job["normalizer_params"],
+                base_kwargs=base_kwargs,
+                slide_worker_count=slide_worker_count,
+                gpu_assign=gpu_assign,
+                processed_log_path=processed_log_path if job["use_processed_log"] else None,
+                processed_slides=processed_slides if job["use_processed_log"] else set(),
+                use_processed_log=job["use_processed_log"],
+            )
+            overall_stats.append(stats)
 
-                env_gpu = gpu_assign[idx % len(gpu_assign)] if gpu_assign else None
-                payloads.append((slide_info, shared_kwargs, env_gpu))
-
-            with ProcessPoolExecutor(max_workers=slide_worker_count, initializer=_init_process_pool, initargs=(normalizer_params,)) as pool:
-                futures = [pool.submit(_process_slide_task, payload) for payload in payloads]
-
-                for fut in tqdm(as_completed(futures), total=len(futures), desc="Slides (mp)"):
-                    slide_id, ok = fut.result()
-                    if ok:
-                        successful += 1
-                        # In mp mode we only know slide_id, so synthesize a minimal info dict
-                        append_processed_slide(processed_log_path, {"slide_id": slide_id, "cohort": "", "label": ""})
-                        processed_slides.add(slide_id)
-                    else:
-                        failed += 1
-                        failed_slides.append(slide_id)
+        total_success = sum(stat["successful"] for stat in overall_stats)
+        total_failed = sum(stat["failed"] for stat in overall_stats)
+        total_skipped = sum(stat["skipped"] for stat in overall_stats)
+        total_considered = sum(stat["considered"] for stat in overall_stats)
+        failed_slides = []
+        for stat in overall_stats:
+            failed_slides.extend(stat["failed_slides"])
 
         logging.info("\n" + "=" * 60)
         logging.info("Processing complete!")
-        logging.info(f"  Successful: {successful}")
-        logging.info(f"  Failed: {failed}")
-        logging.info(f"  Skipped (existing or logged): {skipped}")
-        logging.info(f"  Total considered: {len(slides)}")
+        logging.info(f"  Successful: {total_success}")
+        logging.info(f"  Failed: {total_failed}")
+        logging.info(f"  Skipped (existing or logged): {total_skipped}")
+        logging.info(f"  Total considered: {total_considered}")
         if failed_slides:
             logging.info(
                 "Failed slides: %s",
-                ", ".join(failed_slides[:10])
-                + ("..." if len(failed_slides) > 10 else ""),
+                ", ".join(failed_slides[:10]) + ("..." if len(failed_slides) > 10 else ""),
             )
         logging.info("=" * 60)
 

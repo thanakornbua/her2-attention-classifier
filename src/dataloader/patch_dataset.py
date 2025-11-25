@@ -121,7 +121,8 @@ class PatchDataset(Dataset):
         # Load patch (already normalized during preprocessing)
         try:
             patch = z['patches'][patch_idx]  # uint8 array (H, W, 3)
-            img = Image.fromarray(patch)
+            # Copy array to avoid holding reference to zarr memory
+            img = Image.fromarray(np.array(patch, copy=True))
         except Exception as e:
             # Return black image on error
             print(f"Warning: Failed to load patch {patch_idx} from {self.zarr_paths[zarr_idx]}: {e}")
@@ -132,6 +133,11 @@ class PatchDataset(Dataset):
             img = self.transform(img)
         
         return img, label
+    
+    def __del__(self):
+        """Cleanup zarr handles."""
+        if hasattr(self, 'zarr_handles'):
+            self.zarr_handles.clear()
     
     def get_slide_patches(self, slide_id: str):
         """
@@ -197,11 +203,16 @@ class ZarrPatchDataset(Dataset):
         zarr_idx, patch_idx, label = self.patch_index[idx]
         z = self.zarr_handles[zarr_idx]
         
-        # Load patch
+        # Load patch with copy to avoid memory reference issues
         patch = z['patches'][patch_idx]
-        img = Image.fromarray(patch)
+        img = Image.fromarray(np.array(patch, copy=True))
         
         if self.transform:
             img = self.transform(img)
         
         return img, label
+    
+    def __del__(self):
+        """Cleanup zarr handles."""
+        if hasattr(self, 'zarr_handles'):
+            self.zarr_handles.clear()
