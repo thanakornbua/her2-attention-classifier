@@ -1,18 +1,17 @@
 """
     Discovers Whole Slide Image (WSI) files in a directory and its subdirectories,
-    saves their relative paths and file names to a CSV file, and returns a DataFrame.
+    saves their full paths and file names to a CSV file, and returns a DataFrame.
 
     This function is designed to be called from a script or a Jupyter Notebook.
 
     Args:
         root_dir (str): The root directory to start the search from.
-        output_csv_path (str): The path to save the output CSV file.
         wsi_formats (Tuple[str, ...], optional): A tuple of WSI file extensions
             to search for. The search is case-insensitive.
             Defaults to ('.svs', '.ndpi', '.tif', '.tiff').
 
     Returns:
-        Optional[pd.DataFrame]: A DataFrame containing 'relative_path' and 'file_name'
+        Optional[pd.DataFrame]: A DataFrame containing 'full_path' and 'file_name'
         for each discovered WSI file, or None if no files are found.
 
     Authors:
@@ -34,11 +33,10 @@ import gc
 
 def discover_wsi_paths(
     root_dir: str,
-    output_csv_path: str,
     wsi_formats: Tuple[str, ...] = ('.svs', '.ndpi', '.tif', '.tiff')
 ) -> Optional[pd.DataFrame]:
     wsi_data: List[dict] = []
-    root_path = Path(root_dir)
+    root_path = Path(root_dir).resolve()
 
     if not root_path.is_dir():
         raise FileNotFoundError(f"Error: Root directory not found at '{root_dir}'")
@@ -51,30 +49,18 @@ def discover_wsi_paths(
                 full_path = Path(root) / file
                 relative_path = full_path.relative_to(root_path)
                 wsi_data.append({
-                    'relative_path': str(relative_path),
+                    'full_path': str(Path(root_dir) / relative_path),
                     'file_name': file
                 })
 
     if not wsi_data:
         print("No WSI files found.")
-        # Create an empty DataFrame with specified columns and save it
-        df = pd.DataFrame(columns=['relative_path', 'file_name'])
-        output_dir = Path(output_csv_path).parent
-        output_dir.mkdir(parents=True, exist_ok=True)
-        df.to_csv(output_csv_path, index=False)
-        print(f"Empty CSV created at '{output_csv_path}'.")
         gc.collect()
-        return df
+        return None
 
     # Create a DataFrame and save to CSV
     df = pd.DataFrame(wsi_data)
-    
-    # Ensure the output directory exists
-    output_dir = Path(output_csv_path).parent
-    output_dir.mkdir(parents=True, exist_ok=True)
-    
-    df.to_csv(output_csv_path, index=False)
-    print(f"Found {len(wsi_data)} WSI files. Paths and names saved to '{output_csv_path}'.")
+    print(f"Found {len(wsi_data)} WSI files.")
     
     gc.collect()
     return df

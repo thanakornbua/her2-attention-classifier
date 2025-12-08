@@ -28,6 +28,7 @@ __pycache__/
 /wandb/
 /zarr_raw/
 /zarr_norm/
+/docs/
 
 *.log
 outputs/preprocessing/logs/preprocessing.log
