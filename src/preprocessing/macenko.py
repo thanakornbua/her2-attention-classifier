@@ -25,8 +25,13 @@ def get_macenko_vectors(
     """
     Calculate stain vectors from a histopathological RGB image using Macenko method.
 
-    This function estimates the two primary stain vectors (typically H&E - Hematoxylin
-    and Eosin) from a histology image by analyzing the optical density distribution.
+    This function estimates the two primary stain vectors (Hematoxylin and Eosin) from a
+    histology image by:
+    1. Converting RGB to optical density (OD) space
+    2. Performing SVD to identify the principal plane
+    3. Projecting OD values onto this plane
+    4. Converting to polar coordinates
+    5. Selecting extreme angles (e.g., 1st and 99th percentiles) as stain vectors
 
     Args:
         rgb_image (np.ndarray): RGB image as numpy array with shape (height, width, 3).
@@ -34,12 +39,12 @@ def get_macenko_vectors(
         luminosity_threshold (int, optional): Pixels with luminosity below this value
             are considered background and excluded. Defaults to 10.
         angular_percentile (float, optional): Percentile for selecting extreme angles
-            in the angular distribution. Defaults to 99 (typically 99th or 95th percentile).
+            in the angular distribution. Defaults to 99 (99th percentile).
 
     Returns:
-        tuple: (stain_vector_1, stain_vector_2) - Two normalized stain vectors
-            Each vector has shape (3,) and represents the direction of one stain in
-            optical density space (log-transformed RGB).
+        tuple: (stain_vector_H, stain_vector_E) - Two normalized stain vectors
+            Each vector has shape (3,) and represents one stain direction in OD space.
+            Order: H (Hematoxylin) is typically first, E (Eosin) is second.
 
     Raises:
         ValueError: If input image shape is invalid.
@@ -47,8 +52,8 @@ def get_macenko_vectors(
 
     Example:
         >>> patch = np.random.randint(0, 256, (256, 256, 3), dtype=np.uint8)
-        >>> stain1, stain2 = get_macenko_vectors(patch)
-        >>> print(stain1.shape, stain2.shape)  # (3,) (3,)
+        >>> stain_H, stain_E = get_macenko_vectors(patch)
+        >>> print(stain_H.shape, stain_E.shape)  # (3,) (3,)
     """
     # Input validation
     if rgb_image.ndim != 3 or rgb_image.shape[2] != 3:
@@ -83,25 +88,49 @@ def get_macenko_vectors(
         np.linalg.norm(od_foreground, axis=1), (-1, 1)
     )
 
-    # Find extreme angles in the distribution
-    # Use SVD to find directions of maximum variance
-    # Note: SVD of (N, 3) matrix returns U(N,3), s(3,), Vt(3,3)
-    # We want the right singular vectors (columns of V), not left (rows of U)
+    # MACENKO STEP 1: SVD to find principal plane
+    # SVD of (N, 3) matrix returns U(N,3), s(3,), Vt(3,3)
+    # V (columns of Vt.T) are the orthonormal basis vectors
     _, _, Vt = np.linalg.svd(od_normalized, full_matrices=False)
-    V = Vt.T
+    V = Vt.T  # Shape (3, 3)
 
-    # Get the two primary directions (first two columns of V)
-    # These correspond to the two main stain directions
-    stain_vec_1 = V[:, 0]
-    stain_vec_2 = V[:, 1]
+    # MACENKO STEP 2: Project OD values onto the principal plane (first 2 components)
+    # This projects all normalized OD vectors onto the plane spanned by V[:, 0] and V[:, 1]
+    projections = np.dot(od_normalized, V[:, :2])  # Shape (N, 2)
 
-    # Ensure vectors are in the correct direction (positive in first component)
-    if stain_vec_1[0] < 0:
-        stain_vec_1 = -stain_vec_1
-    if stain_vec_2[0] < 0:
-        stain_vec_2 = -stain_vec_2
+    # MACENKO STEP 3: Convert to polar coordinates in the 2D plane
+    # Calculate angles for each projected point
+    angles = np.arctan2(projections[:, 1], projections[:, 0])  # Shape (N,)
 
-    return stain_vec_1, stain_vec_2
+    # MACENKO STEP 4: Select extreme angles
+    # Find the angles at the lower and upper percentiles
+    # These extreme angles correspond to the two stain directions
+    lower_percentile = 100 - angular_percentile  # e.g., 1 for 99th percentile
+    upper_percentile = angular_percentile          # e.g., 99 for 99th percentile
+
+    angle_low = np.percentile(angles, lower_percentile)
+    angle_high = np.percentile(angles, upper_percentile)
+
+    # Convert angles back to stain vectors in the original 3D OD space
+    # Create unit vectors at these extreme angles in the 2D plane
+    stain_plane_1 = np.array([np.cos(angle_low), np.sin(angle_low)])
+    stain_plane_2 = np.array([np.cos(angle_high), np.sin(angle_high)])
+
+    # Project back to 3D OD space using the basis vectors V[:, :2]
+    stain_vec_H = np.dot(V[:, :2], stain_plane_1)
+    stain_vec_E = np.dot(V[:, :2], stain_plane_2)
+
+    # Normalize to unit vectors
+    stain_vec_H = stain_vec_H / np.linalg.norm(stain_vec_H)
+    stain_vec_E = stain_vec_E / np.linalg.norm(stain_vec_E)
+
+    # Ensure consistent orientation (positive first component)
+    if stain_vec_H[0] < 0:
+        stain_vec_H = -stain_vec_H
+    if stain_vec_E[0] < 0:
+        stain_vec_E = -stain_vec_E
+
+    return stain_vec_H, stain_vec_E
 
 
 def get_macenko_concentrations(
@@ -241,8 +270,14 @@ def estimate_reference_stain_vectors(
     """
     Estimate reference stain vectors from a collection of images.
 
-    Useful for creating a batch-level or dataset-level reference for consistent
-    stain normalization across multiple slides.
+    This function creates a dataset-level reference by:
+    1. Extracting stain vectors (Hematoxylin and Eosin) from each image
+    2. Maintaining separate lists for H and E vectors
+    3. Computing the mean H vector and mean E vector independently
+    4. Returning the average stain matrix for consistent normalization
+
+    Useful for creating a robust, batch-level or dataset-level reference for
+    consistent stain normalization across multiple slides and batches.
 
     Args:
         image_list (list): List of RGB images (numpy arrays) with shape (H, W, 3).
@@ -250,34 +285,45 @@ def estimate_reference_stain_vectors(
         angular_percentile (float, optional): Percentile for angle selection. Defaults to 99.
 
     Returns:
-        np.ndarray: Average stain vectors with shape (2, 3).
+        np.ndarray: Reference stain matrix with shape (2, 3).
+                   Row 0: Average Hematoxylin vector
+                   Row 1: Average Eosin vector
+
+    Raises:
+        ValueError: If no valid stain vectors can be extracted from the image list.
 
     Example:
         >>> patches = [np.random.randint(0, 256, (256, 256, 3), dtype=np.uint8) for _ in range(5)]
         >>> ref_vectors = estimate_reference_stain_vectors(patches)
         >>> print(ref_vectors.shape)  # (2, 3)
+        >>> print(ref_vectors[0])  # Average Hematoxylin vector
+        >>> print(ref_vectors[1])  # Average Eosin vector
     """
-    stain_vectors_list = []
+    stain_vectors_H = []  # List of Hematoxylin vectors
+    stain_vectors_E = []  # List of Eosin vectors
 
     for img in image_list:
         try:
-            stain_vec_1, stain_vec_2 = get_macenko_vectors(
+            stain_vec_H, stain_vec_E = get_macenko_vectors(
                 img, luminosity_threshold, angular_percentile
             )
-            stain_vectors_list.append(stain_vec_1)
-            stain_vectors_list.append(stain_vec_2)
+            # Keep H and E separated in different lists
+            stain_vectors_H.append(stain_vec_H)
+            stain_vectors_E.append(stain_vec_E)
         except ValueError:
-            # Skip images with no foreground
+            # Skip images with no foreground or insufficient stain separation
             continue
 
-    if len(stain_vectors_list) == 0:
+    if len(stain_vectors_H) == 0 or len(stain_vectors_E) == 0:
         raise ValueError("No valid stain vectors could be extracted from image list")
 
-    # Average the stain vectors
-    avg_stain_vectors = np.mean(stain_vectors_list, axis=0)
+    # Average H and E vectors independently
+    avg_stain_vec_H = np.mean(stain_vectors_H, axis=0)
+    avg_stain_vec_E = np.mean(stain_vectors_E, axis=0)
 
-    # Normalize
-    avg_stain_vectors = avg_stain_vectors / np.linalg.norm(avg_stain_vectors)
+    # Normalize to unit vectors
+    avg_stain_vec_H = avg_stain_vec_H / np.linalg.norm(avg_stain_vec_H)
+    avg_stain_vec_E = avg_stain_vec_E / np.linalg.norm(avg_stain_vec_E)
 
-    # Return as (2, 3) array
-    return np.array([avg_stain_vectors, np.array([1.0, 1.0, 1.0]) - avg_stain_vectors])
+    # Return as (2, 3) reference stain matrix
+    return np.array([avg_stain_vec_H, avg_stain_vec_E])
