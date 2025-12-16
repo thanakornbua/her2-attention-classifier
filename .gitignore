@@ -14,7 +14,6 @@
 *.sums
 *.xlsx
 *.log
-*.csv
 *.zarr
 *.env
 *.pth
@@ -22,23 +21,18 @@
 data/
 __pycache__/
 /plots/
-/outputs/opt_gpu_analyse/
-/outputs/vanil_gpu_analyse/
-/outputs/opt_cpu_analyse/
 /wandb/
 /zarr_raw/
 /zarr_norm/
 /docs/
 
 *.log
-outputs/preprocessing/logs/preprocessing.log
 outputs/phase1/models/model_phase1.pth
 outputs/patches_index_val.csv
 outputs/ref_stain_stats.npz
 outputs/patches_index_train.csv
 outputs/patches
 outputs/phase1
-outputs/preprocessing
 outputs/test_large_dataset
 *.tfevents.*
 *.wandb

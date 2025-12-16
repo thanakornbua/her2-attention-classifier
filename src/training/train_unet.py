@@ -14,6 +14,7 @@ from tqdm import tqdm
 import numpy as np
 from typing import Dict, Optional
 import json
+from torch.utils.tensorboard import SummaryWriter
 
 from ..models.unet_model import UNet
 from ..datasets.segmentation_dataset import SegmentationDataset
@@ -211,6 +212,11 @@ def run_training_unet(
     output_path = Path(output_dir)
     output_path.mkdir(parents=True, exist_ok=True)
     
+    # Initialize TensorBoard
+    tb_log_dir = output_path / 'tensorboard_logs'
+    writer = SummaryWriter(str(tb_log_dir))
+    print(f"TensorBoard logs will be saved to: {tb_log_dir}")
+    
     set_seed(cfg['seed'])
     device = get_device()
     print_device_info(device)
@@ -286,6 +292,13 @@ def run_training_unet(
         history['val_loss'].append(val_metrics['val_loss'])
         history['val_iou'].append(val_metrics['iou'])
         
+        # TensorBoard logging
+        writer.add_scalar('Loss/train', train_loss, epoch)
+        writer.add_scalar('Loss/val', val_metrics['val_loss'], epoch)
+        writer.add_scalar('Metrics/val_iou', val_metrics['iou'], epoch)
+        writer.add_scalar('Metrics/val_dice', val_metrics.get('dice', 0), epoch)
+        writer.flush()
+        
         print(f"Train Loss: {train_loss:.4f}")
         print(f"Val Loss: {val_metrics['val_loss']:.4f}")
         print(f"Val IoU: {val_metrics['iou']:.4f}")
@@ -322,6 +335,12 @@ def run_training_unet(
     }
     save_metrics(final_metrics, output_path / 'metrics.json')
     
+    # Close TensorBoard writer
+    writer.add_hparams(cfg, {'hparams/best_iou': best_iou})
+    writer.close()
+    
     print(f"\n✓ U-Net training complete!")
     print(f"  Best IoU: {best_iou:.4f}")
     print(f"  Models saved to: {output_path}")
+    print(f"  TensorBoard logs saved to: {tb_log_dir}")
+    print(f"  To view: tensorboard --logdir={tb_log_dir}")

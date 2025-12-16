@@ -18,6 +18,7 @@ import numpy as np
 import pandas as pd
 from typing import Dict, Optional
 import json
+from torch.utils.tensorboard import SummaryWriter
 
 from ..models.patch_classifier import PatchClassifier
 from ..models.mil_model import AttentionMIL, GatedAttentionMIL
@@ -255,6 +256,11 @@ def run_training_phase2(
     output_path = Path(output_dir)
     output_path.mkdir(parents=True, exist_ok=True)
     
+    # Initialize TensorBoard
+    tb_log_dir = output_path / 'tensorboard_logs'
+    writer = SummaryWriter(str(tb_log_dir))
+    print(f"TensorBoard logs will be saved to: {tb_log_dir}")
+    
     set_seed(cfg['seed'])
     device = get_device()
     print_device_info(device)
@@ -335,6 +341,16 @@ def run_training_phase2(
         history['val_loss'].append(val_metrics['val_loss'])
         history['val_auc'].append(val_metrics['auc'])
         
+        # TensorBoard logging
+        writer.add_scalar('Loss/train', train_loss, epoch)
+        writer.add_scalar('Loss/val', val_metrics['val_loss'], epoch)
+        writer.add_scalar('Metrics/val_auc', val_metrics['auc'], epoch)
+        writer.add_scalar('Metrics/val_accuracy', val_metrics['accuracy'], epoch)
+        writer.add_scalar('Metrics/val_precision', val_metrics['precision'], epoch)
+        writer.add_scalar('Metrics/val_recall', val_metrics['recall'], epoch)
+        writer.add_scalar('Metrics/val_f1', val_metrics['f1'], epoch)
+        writer.flush()
+        
         print(f"Train Loss: {train_loss:.4f}")
         print(f"Val Loss: {val_metrics['val_loss']:.4f}")
         print(f"Val AUC: {val_metrics['auc']:.4f}")
@@ -372,8 +388,14 @@ def run_training_phase2(
     }
     save_metrics(final_metrics, output_path / 'metrics.json')
     
+    # Close TensorBoard writer
+    writer.add_hparams(cfg, {'hparams/best_auc': best_auc})
+    writer.close()
+    
     print(f"\n✓ MIL training complete!")
     print(f"  Best AUC: {best_auc:.4f}")
     print(f"  Models saved to: {output_path}")
+    print(f"  TensorBoard logs saved to: {tb_log_dir}")
+    print(f"  To view: tensorboard --logdir={tb_log_dir}")
     if attn_weights:
         print(f"  Attention weights saved to: {output_path / 'attention_weights'}")
