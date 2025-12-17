@@ -21,7 +21,7 @@ from ..dataloader.zarr_patch_dataset import ZarrPatchDataset
 from ..evaluation.metrics import compute_binary_metrics, find_optimal_threshold
 from ..utils.device import get_device, print_device_info
 from ..utils.reproducibility import set_seed
-from ..utils.io import save_checkpoint, save_metrics, save_config
+from ..utils.io import save_checkpoint, save_metrics, save_config, load_checkpoint
 
 
 def train_epoch(
@@ -143,7 +143,8 @@ def run_training(
     output_dir: str = 'outputs/phase1',
     config: Optional[Dict] = None,
     zarr_path_secondary: Optional[str] = None,
-    patch_metadata: Optional['pd.DataFrame'] = None
+    patch_metadata: Optional['pd.DataFrame'] = None,
+    resume_from: Optional[str] = None
 ):
     """
     Run complete Phase 1 training pipeline.
@@ -175,6 +176,7 @@ def run_training(
         'persistent_workers': config.get('persistent_workers', False),
         'pin_memory': config.get('pin_memory', False),
         'early_stop_patience': config.get('early_stop_patience', 10),
+        'resume_from': config.get('resume_from', resume_from),
     }
     
     # Setup
@@ -249,8 +251,22 @@ def run_training(
     best_auc = 0.0
     patience_counter = 0
     history = {'train_loss': [], 'val_loss': [], 'val_auc': []}
-    
-    for epoch in range(1, cfg['num_epochs'] + 1):
+
+    start_epoch = 1
+    resume_path = cfg.get('resume_from')
+    if resume_path:
+        ckpt_path = Path(resume_path)
+        if ckpt_path.exists():
+            print(f"Resuming from checkpoint: {ckpt_path}")
+            ckpt = load_checkpoint(ckpt_path, model=model, optimizer=optimizer, device=device, weights_only=False)
+            start_epoch = ckpt.get('epoch', 0) + 1
+            if 'metrics' in ckpt and 'auc' in ckpt['metrics']:
+                best_auc = ckpt['metrics']['auc']
+            print(f"Resumed at epoch {start_epoch-1} | Best AUC so far: {best_auc:.4f}")
+        else:
+            print(f"Warning: resume_from path not found: {ckpt_path}. Starting fresh.")
+
+    for epoch in range(start_epoch, cfg['num_epochs'] + 1):
         print(f"\nEpoch {epoch}/{cfg['num_epochs']}")
         
         # Train

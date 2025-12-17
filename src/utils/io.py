@@ -47,7 +47,8 @@ def load_checkpoint(
     checkpoint_path: Path,
     model: torch.nn.Module = None,
     optimizer: torch.optim.Optimizer = None,
-    device: torch.device = None
+    device: torch.device = None,
+    weights_only: bool = False
 ) -> Dict[str, Any]:
     """
     Load a training checkpoint.
@@ -61,7 +62,15 @@ def load_checkpoint(
     Returns:
         Dictionary containing checkpoint data
     """
-    checkpoint = torch.load(checkpoint_path, map_location=device)
+    # Allow legacy numpy scalar in checkpoints when weights_only=False (PyTorch 2.6 safety change)
+    if not weights_only:
+        try:
+            import numpy as _np
+            torch.serialization.add_safe_globals([_np.core.multiarray.scalar])
+        except Exception:
+            pass
+
+    checkpoint = torch.load(checkpoint_path, map_location=device, weights_only=weights_only)
     
     if model is not None and 'model_state_dict' in checkpoint:
         model.load_state_dict(checkpoint['model_state_dict'])
