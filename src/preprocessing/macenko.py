@@ -327,3 +327,4 @@ def estimate_reference_stain_vectors(
 
     # Return as (2, 3) reference stain matrix
     return np.array([avg_stain_vec_H, avg_stain_vec_E])
+
