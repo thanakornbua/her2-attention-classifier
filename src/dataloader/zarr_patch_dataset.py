@@ -46,51 +46,77 @@ IMAGENET_STD = np.array([0.229, 0.224, 0.225], dtype=np.float32)
 
 class ZarrPatchDataset(Dataset):
     """
-    Loads pre-extracted patches from one or two Zarr archives.
+    Loads pre-extracted patches using EXPLICIT ZARR ROUTING.
     
-    Supports two usage modes:
-    1. Single Zarr: zarr_root only (traditional mode)
-    2. Dual Zarr: zarr_root (normalized) + zarr_root_secondary (raw) with patch_metadata for routing
+    Each row in patch_metadata contains:
+    - zarr_path: Full path to the Zarr file containing this patch
+    - zarr_index: The exact index within that Zarr file
+    - her2_status: The label for this patch
+    
+    This eliminates ambiguity and prevents silent data corruption from index misalignment.
     
     Args:
-        zarr_root: Path to primary Zarr archive (or only Zarr if not using dual mode)
-        indices: Array of indices to load
-        zarr_root_secondary: Optional path to secondary Zarr archive (for raw patches)
-        patch_metadata: Optional DataFrame with 'source' column for routing between Zarrs
+        zarr_root: DEPRECATED (can pass None). Use patch_metadata['zarr_path'] instead.
+        indices: Array of indices into patch_metadata DataFrame
+        zarr_root_secondary: DEPRECATED (can pass None). Use patch_metadata['zarr_path'] instead.
+        patch_metadata: DataFrame with ['zarr_path', 'zarr_index', 'her2_status'] columns
     """
     def __init__(self, zarr_root: str, indices, zarr_root_secondary=None, patch_metadata=None):
         super().__init__()
         
-        # Open primary Zarr
-        self.root_primary = zarr.open(zarr_root, mode="r")
-        self.patches_primary = self.root_primary
-        self.zarr_root = zarr_root
-        
-        # Setup for dual Zarr mode
-        self.use_dual_zarr = zarr_root_secondary is not None
-        if self.use_dual_zarr:
-            self.root_secondary = zarr.open(zarr_root_secondary, mode="r")
-            self.patches_secondary = self.root_secondary
-            self.zarr_root_secondary = zarr_root_secondary
-            
-            # Require metadata for routing
-            if patch_metadata is None:
-                raise ValueError("patch_metadata required when using dual Zarr mode")
+        # NEW: Explicit routing mode (recommended)
+        if patch_metadata is not None and 'zarr_path' in patch_metadata.columns:
             self.metadata = patch_metadata
+            self.indices = np.array(list(indices), dtype=np.int64)
             
-            # Calculate cumulative sizes for index mapping
-            self.primary_size = self.patches_primary.shape[0]
+            # Validate metadata structure
+            required_cols = ['zarr_path', 'zarr_index', 'her2_status']
+            for col in required_cols:
+                if col not in self.metadata.columns:
+                    raise ValueError(f"patch_metadata missing required column: {col}")
+            
+            # Open all unique Zarr files and cache them
+            self.zarr_cache = {}
+            unique_zarrs = self.metadata['zarr_path'].unique()
+            print(f"Opening {len(unique_zarrs)} Zarr archive(s) for dataset...")
+            for zarr_path in unique_zarrs:
+                self.zarr_cache[zarr_path] = zarr.open(str(zarr_path), mode="r")
+                print(f"  Cached: {zarr_path} (shape={self.zarr_cache[zarr_path].shape})")
+            
+            self.use_explicit_routing = True
+            print(f"✓ Dataset initialized with EXPLICIT routing ({len(self)} samples)")
+            
+        # LEGACY: Old dual-Zarr mode (deprecated but kept for backwards compatibility)
+        elif zarr_root is not None:
+            print("⚠️  Using LEGACY dual-Zarr mode. Consider updating to explicit routing.")
+            self.root_primary = zarr.open(zarr_root, mode="r")
+            self.patches_primary = self.root_primary
+            self.zarr_root = zarr_root
+            
+            self.use_dual_zarr = zarr_root_secondary is not None
+            if self.use_dual_zarr:
+                self.root_secondary = zarr.open(zarr_root_secondary, mode="r")
+                self.patches_secondary = self.root_secondary
+                self.zarr_root_secondary = zarr_root_secondary
+                
+                if patch_metadata is None:
+                    raise ValueError("patch_metadata required when using dual Zarr mode")
+                self.metadata = patch_metadata
+                self.primary_size = self.patches_primary.shape[0]
+            else:
+                self.root_secondary = None
+                self.patches_secondary = None
+                self.metadata = patch_metadata
+                self.primary_size = self.patches_primary.shape[0]
+            
+            self.indices = np.array(list(indices), dtype=np.int64)
+            self.use_explicit_routing = False
+            
+            # Validate patch dimensions
+            assert self.patches_primary.ndim == 4 and self.patches_primary.shape[-1] == 3, \
+                f"patches must be (N, H, W, 3), got {self.patches_primary.shape}"
         else:
-            self.root_secondary = None
-            self.patches_secondary = None
-            self.metadata = None
-            self.primary_size = self.patches_primary.shape[0]
-        
-        self.indices = np.array(list(indices), dtype=np.int64)
-        
-        # Validate patch dimensions
-        assert self.patches_primary.ndim == 4 and self.patches_primary.shape[-1] == 3, \
-            f"patches must be (N, H, W, 3), got {self.patches_primary.shape}"
+            raise ValueError("Must provide either zarr_root or patch_metadata with zarr_path column")
 
     def __len__(self):
         return int(self.indices.shape[0])
@@ -98,30 +124,37 @@ class ZarrPatchDataset(Dataset):
     def __getitem__(self, i):
         idx = int(self.indices[i])
         
-        # Route to correct Zarr archive and map index
-        if self.use_dual_zarr:
-            # Get metadata for this global index
-            source = self.metadata.iloc[idx]['source']
-            patch_global_index = int(self.metadata.iloc[idx]['patch_global_index'])
+        # NEW: Explicit routing - each row knows exactly where it lives
+        if self.use_explicit_routing:
+            row = self.metadata.iloc[idx]
+            zarr_path = row['zarr_path']
+            zarr_index = int(row['zarr_index'])
+            label = int(row['her2_status'])
             
-            # Select Zarr and get patch
-            if source == 'normalized':
-                patch_u8 = self.patches_primary[patch_global_index]
-            else:  # 'raw'
-                patch_u8 = self.patches_secondary[patch_global_index]
+            # Load from the correct Zarr file at the correct index
+            zarr_array = self.zarr_cache[zarr_path]
+            patch_u8 = zarr_array[zarr_index]
+            
+        # LEGACY: Old dual-Zarr mode
         else:
-            # Single Zarr mode: direct indexing
-            patch_u8 = self.patches_primary[idx]
-        
-        # Get label from metadata if available, otherwise from Zarr
-        if self.metadata is not None:
-            label = int(self.metadata.iloc[idx]['her2_status'])
-        else:
-            # Fallback: try to get from Zarr labels
-            if 'labels' in self.root_primary:
-                label = int(self.root_primary['labels'][idx])
+            if self.use_dual_zarr:
+                source = self.metadata.iloc[idx]['source']
+                patch_global_index = int(self.metadata.iloc[idx]['patch_global_index'])
+                
+                if source == 'normalized':
+                    patch_u8 = self.patches_primary[patch_global_index]
+                else:
+                    patch_u8 = self.patches_secondary[patch_global_index]
             else:
-                label = 0  # Default
+                patch_u8 = self.patches_primary[idx]
+            
+            if self.metadata is not None:
+                label = int(self.metadata.iloc[idx]['her2_status'])
+            else:
+                if 'labels' in self.root_primary:
+                    label = int(self.root_primary['labels'][idx])
+                else:
+                    label = 0
         
         # Preprocess: normalize to ImageNet stats
         img = patch_u8.astype(np.float32) / 255.0
