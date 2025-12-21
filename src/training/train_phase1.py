@@ -12,6 +12,7 @@ from torch.amp import autocast, GradScaler
 from pathlib import Path
 from tqdm import tqdm
 import numpy as np
+import pandas as pd
 from typing import Dict, Optional
 import json
 from torch.utils.tensorboard import SummaryWriter
@@ -197,10 +198,28 @@ def run_training(
     
     # Data
     print("\nLoading datasets...")
-    use_dual = zarr_path_secondary is not None and patch_metadata is not None
     
-    if use_dual:
-        print(f"Using DUAL Zarr archives (normalized + raw)")
+    # Detect explicit routing mode (new recommended way)
+    use_explicit_routing = (patch_metadata is not None and 
+                           'zarr_path' in patch_metadata.columns and 
+                           'zarr_index' in patch_metadata.columns)
+    
+    if use_explicit_routing:
+        print(f"Using EXPLICIT Zarr routing (each row specifies its Zarr file and index)")
+        train_ds = ZarrPatchDataset(
+            zarr_root=None,  # Not used in explicit mode
+            indices=train_indices,
+            patch_metadata=patch_metadata
+        )
+        val_ds = ZarrPatchDataset(
+            zarr_root=None,  # Not used in explicit mode
+            indices=val_indices,
+            patch_metadata=patch_metadata
+        )
+    # Legacy dual-Zarr mode (deprecated)
+    elif zarr_path_secondary is not None and patch_metadata is not None:
+        print(f"Using LEGACY dual Zarr archives (normalized + raw)")
+        print(f"⚠️  Consider upgrading to explicit routing mode")
         train_ds = ZarrPatchDataset(
             zarr_path, 
             indices=train_indices,
@@ -213,8 +232,11 @@ def run_training(
             zarr_root_secondary=zarr_path_secondary,
             patch_metadata=patch_metadata
         )
+    # Legacy single-Zarr mode
     else:
-        print(f"Using single Zarr archive")
+        if zarr_path is None:
+            raise ValueError("zarr_path cannot be None in legacy mode. Use explicit routing instead.")
+        print(f"Using single Zarr archive (legacy mode)")
         train_ds = ZarrPatchDataset(zarr_path, indices=train_indices)
         val_ds = ZarrPatchDataset(zarr_path, indices=val_indices)
     

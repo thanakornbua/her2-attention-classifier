@@ -30,6 +30,32 @@ from ..utils.reproducibility import set_seed
 from ..utils.io import save_checkpoint, save_metrics, save_config, load_checkpoint
 
 
+def warn_if_case_domain_mixed(
+    patch_metadata: pd.DataFrame,
+    *,
+    case_col: str = "case_name",
+    domain_col: str = "source",
+    warn_threshold: int = 0,
+) -> None:
+    """Warn if any case mixes domains (raw/normalized).
+
+    For MIL, mixed-domain bags can cause the attention head to latch onto stain domain.
+    This helper is intentionally non-fatal.
+    """
+    if patch_metadata is None or patch_metadata.empty:
+        return
+    if case_col not in patch_metadata.columns or domain_col not in patch_metadata.columns:
+        return
+
+    mixed = patch_metadata.groupby(case_col, dropna=False)[domain_col].nunique(dropna=False)
+    n_mixed = int((mixed > 1).sum())
+    if n_mixed > warn_threshold:
+        print(
+            f"⚠️  MIL heads-up: {n_mixed} case(s) have mixed domains in patch_metadata "
+            f"(column '{domain_col}'). Consider per-case domain consistency or domain conditioning."
+        )
+
+
 def extract_features(
     backbone: nn.Module,
     dataloader: DataLoader,
