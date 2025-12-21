@@ -17,6 +17,7 @@
 *.zarr
 *.env
 *.pth
+*.npy
 
 data/
 __pycache__/

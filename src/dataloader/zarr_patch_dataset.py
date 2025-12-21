@@ -60,9 +60,11 @@ class ZarrPatchDataset(Dataset):
         indices: Array of indices into patch_metadata DataFrame
         zarr_root_secondary: DEPRECATED (can pass None). Use patch_metadata['zarr_path'] instead.
         patch_metadata: DataFrame with ['zarr_path', 'zarr_index', 'her2_status'] columns
+        return_metadata: If True, __getitem__ also returns slide_name and case_name.
     """
-    def __init__(self, zarr_root: str, indices, zarr_root_secondary=None, patch_metadata=None):
+    def __init__(self, zarr_root: str, indices, zarr_root_secondary=None, patch_metadata=None, return_metadata: bool = False):
         super().__init__()
+        self.return_metadata = return_metadata
         
         # NEW: Explicit routing mode (recommended)
         if patch_metadata is not None and 'zarr_path' in patch_metadata.columns:
@@ -130,6 +132,8 @@ class ZarrPatchDataset(Dataset):
             zarr_path = row['zarr_path']
             zarr_index = int(row['zarr_index'])
             label = int(row['her2_status'])
+            slide_name = row['slide_name'] if 'slide_name' in row else None
+            case_name = row['case_name'] if 'case_name' in row else None
             
             # Load from the correct Zarr file at the correct index
             zarr_array = self.zarr_cache[zarr_path]
@@ -138,8 +142,11 @@ class ZarrPatchDataset(Dataset):
         # LEGACY: Old dual-Zarr mode
         else:
             if self.use_dual_zarr:
-                source = self.metadata.iloc[idx]['source']
-                patch_global_index = int(self.metadata.iloc[idx]['patch_global_index'])
+                row = self.metadata.iloc[idx]
+                source = row['source']
+                patch_global_index = int(row['patch_global_index'])
+                slide_name = row['slide_name'] if 'slide_name' in row else None
+                case_name = row['case_name'] if 'case_name' in row else None
                 
                 if source == 'normalized':
                     patch_u8 = self.patches_primary[patch_global_index]
@@ -147,6 +154,8 @@ class ZarrPatchDataset(Dataset):
                     patch_u8 = self.patches_secondary[patch_global_index]
             else:
                 patch_u8 = self.patches_primary[idx]
+                slide_name = None
+                case_name = None
             
             if self.metadata is not None:
                 label = int(self.metadata.iloc[idx]['her2_status'])
@@ -164,4 +173,6 @@ class ZarrPatchDataset(Dataset):
         
         cls_t = torch.tensor(label, dtype=torch.long)
         loc_t = torch.tensor([0.25, 0.25, 0.5, 0.5], dtype=torch.float32)
+        if self.return_metadata:
+            return img_t, cls_t, loc_t, slide_name, case_name
         return img_t, cls_t, loc_t
