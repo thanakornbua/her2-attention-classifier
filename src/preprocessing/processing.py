@@ -1,3 +1,13 @@
+"""Stain-normalization utilities for streaming image data into Zarr.
+
+This module provides helpers to normalize RGB images using precomputed
+reference stain vectors (e.g. Macenko vectors) and to efficiently write
+the normalized images into Zarr stores. Functions are written to be
+memory-conscious and can optionally leverage GPU acceleration via CuPy.
+
+All public functions and helpers follow PEP 257 docstring conventions.
+"""
+
 import numpy as np
 import cv2
 import zarr

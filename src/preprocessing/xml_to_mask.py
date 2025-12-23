@@ -1,3 +1,20 @@
+"""XML-to-mask conversion helpers for tumor region annotations.
+
+This module parses ASAP-style XML annotations and converts the polygon
+regions into binary masks aligned with corresponding whole slide images
+(WSI). It supports both CuCIM and OpenSlide backends and can optionally
+use CUDA-accelerated OpenCV paths for faster overlay generation.
+
+Key responsibilities:
+    - Robustly parse XML annotations into polygon lists.
+    - Construct full-resolution binary masks for tumor regions.
+    - Optionally create WSI overlays using the generated masks.
+
+The public entry point is :func:`process_slide`, which takes a single
+WSI/XML pair and returns either a mask path or overlay path depending
+on configuration. Docstrings follow PEP 257 conventions.
+"""
+
 import numpy as np
 import gc
 try:
@@ -20,7 +37,18 @@ import cv2
 
 HAS_CV2_CUDA = hasattr(cv2, 'cuda')
 
+
 def parse_xml_lxml(xml_path):
+    """Parse an ASAP-style XML file into labeled polygon regions.
+
+    Args:
+        xml_path: Path-like object pointing to the XML annotation file.
+
+    Returns:
+        list[dict]: A list of dictionaries, each with keys:
+            - "label": Region label/name from the XML.
+            - "polygon": List of ``(x, y)`` integer vertex coordinates.
+    """
     polygons = []
     try:
         tree = ET.parse(str(xml_path))
@@ -49,7 +77,18 @@ def parse_xml_lxml(xml_path):
             raise
     return polygons
 
+
 def polygon_bbox(polygon, pad=0):
+    """Compute a padded bounding box for a polygon.
+
+    Args:
+        polygon: Iterable of ``(x, y)`` vertices.
+        pad: Optional integer padding (in pixels) to expand the box.
+
+    Returns:
+        tuple[int, int, int, int]: ``(min_x, min_y, max_x, max_y)`` in
+        pixel coordinates.
+    """
     xs = [p[0] for p in polygon]
     ys = [p[1] for p in polygon]
     minx = max(0, min(xs) - pad)
@@ -58,7 +97,21 @@ def polygon_bbox(polygon, pad=0):
     maxy = max(ys) + pad
     return minx, miny, maxx, maxy
 
+
 def read_wsi_region(wsi_reader, x, y, w, h, level=0):
+    """Read an RGB region from a WSI using CuCIM or OpenSlide.
+
+    Args:
+        wsi_reader: Either a CuImage or OpenSlide object.
+        x: Left coordinate in level-0 reference frame.
+        y: Top coordinate in level-0 reference frame.
+        w: Width of the region in pixels.
+        h: Height of the region in pixels.
+        level: Pyramid level to read from (0 is highest resolution).
+
+    Returns:
+        np.ndarray: RGB image patch with shape ``(h, w, 3)``.
+    """
     if USE_CUCIM and isinstance(wsi_reader, CuImage):
         # CuCIM expects (location, size, level); use kwargs for safety across versions
         patch = wsi_reader.read_region(location=(x, y), size=(w, h), level=level)
@@ -74,9 +127,43 @@ def read_wsi_region(wsi_reader, x, y, w, h, level=0):
             arr = arr[:, :, :3]
         return arr
 
+
 def process_slide(
-    xml_path, wsi_path, out_mask_path=None, create_overlay=False, overlay_path=None, chunk_size=4096, pad=2
+    xml_path,
+    wsi_path,
+    out_mask_path=None,
+    create_overlay=False,
+    overlay_path=None,
+    chunk_size=4096,
+    pad=2,
 ):
+    """Generate a full-resolution tumor mask (and optional overlay) for one slide.
+
+    This function loads a WSI and its corresponding ASAP-style XML file,
+    rasterizes all polygon annotations into a binary mask, and optionally
+    produces an RGB overlay image where the mask is applied to the WSI.
+
+    Args:
+        xml_path: Path to the XML annotation file for the slide.
+        wsi_path: Path to the corresponding whole slide image.
+        out_mask_path: Optional output path for saving the binary mask
+            as a PNG image. If ``None``, the mask is kept in memory.
+        create_overlay: If ``True``, also generate an RGB overlay image
+            of the WSI masked by the tumor regions.
+        overlay_path: Optional explicit path for the overlay PNG. If not
+            provided but ``out_mask_path`` is set, a *_wsi_with_mask.png
+            file will be generated alongside the mask.
+        chunk_size: Tile size (in pixels) for GPU-accelerated, chunked
+            processing when the full slide is too large for memory.
+        pad: Optional polygon padding (in pixels) applied when computing
+            bounding boxes; useful for slightly expanding regions.
+
+    Returns:
+        If ``out_mask_path`` is provided, returns the overlay path when
+        GPU full-image mode succeeds, otherwise ``None`` or the in-memory
+        overlay depending on code path. When no polygons are found, the
+        function returns ``None``.
+    """
     print(f"Processing: {wsi_path} + {xml_path}")
 
     # Open WSI and determine dimensions in a robust way across CuCIM/OpenSlide

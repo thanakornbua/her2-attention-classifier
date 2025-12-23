@@ -17,7 +17,8 @@ import json
 from torch.utils.tensorboard import SummaryWriter
 
 from ..models.unet_model import UNet
-from ..datasets.segmentation_dataset import SegmentationDataset
+from ..datasets.segmentation_dataset import SegmentationDataset, WSISegmentationDataset
+from ..datasets.zarr_segmentation_dataset import ZarrSegmentationDataset
 from ..utils.device import get_device, print_device_info
 from ..utils.reproducibility import set_seed
 from ..utils.io import save_checkpoint, save_metrics, save_config
@@ -48,11 +49,11 @@ def dice_loss(pred: torch.Tensor, target: torch.Tensor, smooth: float = 1e-6) ->
 
 def combined_loss(pred: torch.Tensor, target: torch.Tensor, alpha: float = 0.5) -> torch.Tensor:
     """
-    Combined Dice + BCE loss.
+    Combined Dice + CrossEntropy loss (autocast-safe).
     
     Args:
         pred: Prediction logits [B, C, H, W]
-        target: Ground truth [B, 1, H, W]
+        target: Ground truth [B, 1, H, W] or [B, H, W]
         alpha: Weight for Dice loss
         
     Returns:
@@ -61,11 +62,14 @@ def combined_loss(pred: torch.Tensor, target: torch.Tensor, alpha: float = 0.5) 
     # Dice loss
     dice = dice_loss(pred, target)
     
-    # BCE loss
-    pred_probs = torch.softmax(pred, dim=1)
-    bce = nn.BCELoss()(pred_probs[:, 1], target.float().squeeze(1))
+    # CrossEntropy loss (autocast-safe, works with logits)
+    # Target must be [B, H, W] with class indices (long tensor)
+    if target.dim() == 4 and target.shape[1] == 1:
+        target = target.squeeze(1)  # [B, 1, H, W] -> [B, H, W]
+    target_long = target.long()
+    ce = nn.CrossEntropyLoss()(pred, target_long)
     
-    return alpha * dice + (1 - alpha) * bce
+    return alpha * dice + (1 - alpha) * ce
 
 
 def train_epoch_unet(
@@ -175,21 +179,36 @@ def validate_unet(
 
 
 def run_training_unet(
-    images_dir: str,
-    masks_dir: str,
+    images_dir: str = None,
+    masks_dir: str = None,
+    wsi_paths: list = None,
+    mask_paths: list = None,
+    zarr_path: str = None,
     train_split: float = 0.8,
     output_dir: str = 'outputs/unet',
-    config: Optional[Dict] = None
+    config: Optional[Dict] = None,
+    use_wsi_mode: bool = False,
+    use_zarr_mode: bool = False
 ):
     """
     Run complete U-Net training pipeline.
     
+    THREE MODES:
+    1. Pre-tiled mode: images_dir + masks_dir with pre-extracted tiles
+    2. WSI mode (memory-efficient): wsi_paths + mask_paths for on-the-fly extraction
+    3. Zarr mode (fastest): zarr_path with pre-extracted patches in Zarr format
+    
     Args:
-        images_dir: Directory with images
-        masks_dir: Directory with masks
+        images_dir: Directory with pre-tiled images (mode 1)
+        masks_dir: Directory with pre-tiled masks (mode 1)
+        wsi_paths: List of WSI file paths (mode 2)
+        mask_paths: List of mask file paths (mode 2)
+        zarr_path: Path to Zarr archive with images/ and masks/ (mode 3)
         train_split: Train/val split ratio
         output_dir: Output directory
         config: Configuration dictionary
+        use_wsi_mode: Use WSI on-the-fly extraction (memory-efficient)
+        use_zarr_mode: Use Zarr pre-extracted patches (fastest)
     """
     # Default config
     if config is None:
@@ -200,12 +219,16 @@ def run_training_unet(
         'batch_size': config.get('batch_size', 8),
         'num_epochs': config.get('num_epochs', 50),
         'lr': config.get('lr', 1e-4),
+        'weight_decay': config.get('weight_decay', 1e-5),
         'in_channels': config.get('in_channels', 3),
         'num_classes': config.get('num_classes', 2),
         'base_channels': config.get('base_channels', 64),
         'amp_enabled': config.get('amp_enabled', True),
         'num_workers': config.get('num_workers', 2),
         'early_stop_patience': config.get('early_stop_patience', 10),
+        'patch_size': config.get('patch_size', 256),
+        'stride': config.get('stride', 256),
+        'level': config.get('level', 0),
     }
     
     # Setup
@@ -224,9 +247,51 @@ def run_training_unet(
     # Save config
     save_config(cfg, output_path / 'config_used.yaml')
     
-    # Data
+    # Data - Choose mode based on inputs
     print("\nLoading segmentation dataset...")
-    dataset = SegmentationDataset(images_dir, masks_dir)
+    
+    if use_zarr_mode or (zarr_path is not None):
+        # MODE 3: Zarr pre-extracted patches (fastest)
+        print("Mode: Zarr pre-extracted patches (fastest)")
+        print(f"  - Reads from pre-extracted Zarr archive")
+        print(f"  - ~10× faster than on-the-fly WSI extraction")
+        print(f"  - One-time extraction cost, reusable for training")
+        
+        if zarr_path is None:
+            raise ValueError("Zarr mode requires zarr_path")
+        
+        dataset = ZarrSegmentationDataset(zarr_path=zarr_path)
+        
+    elif use_wsi_mode or (wsi_paths is not None and mask_paths is not None):
+        # MODE 2: WSI on-the-fly extraction (memory-efficient)
+        print("Mode: WSI on-the-fly extraction (memory-efficient)")
+        print(f"  - Opens WSI only when needed")
+        print(f"  - No pre-tiling required")
+        print(f"  - Automatic memory cleanup")
+        
+        if wsi_paths is None or mask_paths is None:
+            raise ValueError("WSI mode requires wsi_paths and mask_paths")
+        
+        dataset = WSISegmentationDataset(
+            wsi_paths=wsi_paths,
+            mask_paths=mask_paths,
+            patch_size=cfg['patch_size'],
+            stride=cfg['stride'],
+            level=cfg['level']
+        )
+    else:
+        # MODE 1: Pre-tiled images
+        print("Mode: Pre-tiled images")
+        
+        if images_dir is None or masks_dir is None:
+            raise ValueError("Pre-tiled mode requires images_dir and masks_dir")
+        
+        dataset = SegmentationDataset(
+            images_dir=images_dir,
+            masks_dir=masks_dir,
+            patch_size=cfg['patch_size'],
+            stride=cfg['stride']
+        )
     
     # Split
     n_train = int(train_split * len(dataset))
@@ -266,7 +331,11 @@ def run_training_unet(
     print(f"Model parameters: {sum(p.numel() for p in model.parameters()):,}")
     
     # Optimizer
-    optimizer = optim.Adam(model.parameters(), lr=cfg['lr'], weight_decay=1e-5)
+    optimizer = optim.Adam(
+        model.parameters(),
+        lr=cfg['lr'],
+        weight_decay=cfg['weight_decay']
+    )
     
     # Training loop
     print("\nStarting U-Net training...")

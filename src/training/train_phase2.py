@@ -135,14 +135,23 @@ def train_epoch_mil(
     num_batches = 0
     
     pbar = tqdm(dataloader, desc='Training MIL')
-    for features, labels, slide_ids, lengths in pbar:
+    for batch in pbar:
+        # Handle both with and without ROI confidence
+        if len(batch) == 5:
+            features, labels, slide_ids, lengths, roi_confidence = batch
+        else:
+            features, labels, slide_ids, lengths = batch
+            roi_confidence = None
+        
         features = features.to(device)
         labels = labels.to(device)
+        if roi_confidence is not None:
+            roi_confidence = roi_confidence.to(device)
         
         optimizer.zero_grad()
         
         with autocast('cuda', enabled=amp_enabled):
-            logits = model(features)
+            logits = model(features, roi_confidence=roi_confidence)
             loss = criterion(logits, labels)
         
         if amp_enabled:
@@ -187,6 +196,20 @@ def validate_mil(
     """
     model.eval()
     
+    # Handle empty validation set
+    # Check both len(dataloader.dataset) and try to get first batch
+    if hasattr(dataloader.dataset, '__len__'):
+        if len(dataloader.dataset) == 0:
+            metrics = {
+                'val_loss': 0.0,
+                'auc': 0.0,
+                'accuracy': 0.0,
+                'precision': 0.0,
+                'recall': 0.0,
+                'f1': 0.0,
+            }
+            return metrics, {} if save_attention else None
+    
     total_loss = 0.0
     all_probs = []
     all_preds = []
@@ -194,20 +217,29 @@ def validate_mil(
     attention_weights_dict = {}
     
     with torch.no_grad():
-        for features, labels, slide_ids, lengths in tqdm(dataloader, desc='Validation'):
+        for batch in tqdm(dataloader, desc='Validation'):
+            # Handle both with and without ROI confidence
+            if len(batch) == 5:
+                features, labels, slide_ids, lengths, roi_confidence = batch
+            else:
+                features, labels, slide_ids, lengths = batch
+                roi_confidence = None
+            
             features = features.to(device)
             labels = labels.to(device)
+            if roi_confidence is not None:
+                roi_confidence = roi_confidence.to(device)
             
             with autocast('cuda', enabled=amp_enabled):
                 if save_attention:
-                    logits, attention = model(features, return_attention=True)
+                    logits, attention = model(features, roi_confidence=roi_confidence, return_attention=True)
                     
                     # Save attention weights per slide
                     for i, slide_id in enumerate(slide_ids):
                         length = lengths[i].item()
                         attention_weights_dict[slide_id] = attention[i, :length].cpu().numpy()
                 else:
-                    logits = model(features)
+                    logits = model(features, roi_confidence=roi_confidence)
                 
                 loss = criterion(logits, labels)
             
@@ -246,7 +278,8 @@ def run_training_phase2(
     train_slide_ids: np.ndarray,
     val_slide_ids: np.ndarray,
     output_dir: str = 'outputs/phase2',
-    config: Optional[Dict] = None
+    config: Optional[Dict] = None,
+    use_roi_confidence: bool = False
 ):
     """
     Run complete Phase 2 MIL training pipeline.
@@ -256,6 +289,9 @@ def run_training_phase2(
         labels_csv: CSV with slide labels
         train_slide_ids: Training slide IDs
         val_slide_ids: Validation slide IDs
+        output_dir: Output directory for checkpoints
+        config: Configuration dictionary
+        use_roi_confidence: Whether to use ROI confidence weighting
         output_dir: Output directory
         config: Configuration dictionary
     """
@@ -268,6 +304,7 @@ def run_training_phase2(
         'batch_size': config.get('batch_size', 8),
         'num_epochs': config.get('num_epochs', 50),
         'lr': config.get('lr', 1e-4),
+        'weight_decay': config.get('weight_decay', 1e-4),
         'feature_dim': config.get('feature_dim', 2048),
         'hidden_dim': config.get('hidden_dim', 512),
         'num_classes': config.get('num_classes', 2),
@@ -296,8 +333,13 @@ def run_training_phase2(
     
     # Data
     print("\nLoading slide datasets...")
-    train_ds = SlideFeatureDataset(features_dir, labels_csv, train_slide_ids)
-    val_ds = SlideFeatureDataset(features_dir, labels_csv, val_slide_ids)
+    train_ds = SlideFeatureDataset(features_dir, labels_csv, train_slide_ids, use_roi_confidence=use_roi_confidence)
+    val_ds = SlideFeatureDataset(features_dir, labels_csv, val_slide_ids, use_roi_confidence=use_roi_confidence)
+    
+    print(f"Train slides: {len(train_ds)}")
+    print(f"Val slides: {len(val_ds)}")
+    if use_roi_confidence:
+        print("ROI confidence weighting: ENABLED")
     
     train_dl = DataLoader(
         train_ds,
@@ -339,7 +381,7 @@ def run_training_phase2(
     
     # Loss and optimizer
     criterion = nn.CrossEntropyLoss()
-    optimizer = optim.Adam(model.parameters(), lr=cfg['lr'])
+    optimizer = optim.Adam(model.parameters(), lr=cfg['lr'], weight_decay=cfg['weight_decay'])
     
     # Training loop
     print("\nStarting MIL training...")
@@ -355,8 +397,8 @@ def run_training_phase2(
             model, train_dl, optimizer, criterion, device, cfg['amp_enabled']
         )
         
-        # Validate (save attention on last epoch)
-        save_attn = (epoch == cfg['num_epochs'])
+        # Validate (save attention on last epoch only if validation data exists)
+        save_attn = (epoch == cfg['num_epochs']) and len(val_ds) > 0
         val_metrics, attn_weights = validate_mil(
             model, val_dl, criterion, device, cfg['amp_enabled'],
             save_attention=save_attn, output_dir=output_path

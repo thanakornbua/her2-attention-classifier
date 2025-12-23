@@ -1,3 +1,17 @@
+"""Sampling utilities for mixing normalized and raw patch domains.
+
+This module provides helpers to build controlled mixtures of normalized
+and raw image patches for training, with options for:
+
+    - Patch-level or case-level ratio enforcement.
+    - Label-stratified sampling to reduce class imbalance drift.
+    - Enforcing single-domain per case for MIL-style training.
+
+The main public API is :func:`sample_dual_domain`, which returns both a
+combined metadata DataFrame and a :class:`SamplingReport` describing the
+result. Docstrings are written to follow PEP 257 conventions.
+"""
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -26,10 +40,29 @@ class SamplingReport:
 
 
 def _rng(seed: int) -> np.random.Generator:
+    """Create a reproducible NumPy random number generator.
+
+    Args:
+        seed: Integer seed used to initialize the RNG.
+
+    Returns:
+        A ``np.random.Generator`` instance seeded with ``seed``.
+    """
     return np.random.default_rng(int(seed))
 
 
 def _label_mode(series: pd.Series) -> int:
+    """Return the most frequent label in a Series (deterministic).
+
+    In case of ties between labels with the same maximum count, the
+    smallest label value is returned to ensure deterministic behavior.
+
+    Args:
+        series: Pandas Series of integer-like labels.
+
+    Returns:
+        The mode label as an ``int``; returns ``0`` if the series is empty.
+    """
     # deterministic mode for ties: pick smallest label
     vc = series.value_counts()
     if vc.empty:

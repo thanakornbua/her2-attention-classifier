@@ -53,12 +53,13 @@ class AttentionMIL(nn.Module):
             nn.Linear(hidden_dim, num_classes)
         )
     
-    def forward(self, features, return_attention=False):
+    def forward(self, features, roi_confidence=None, return_attention=False):
         """
         Forward pass.
         
         Args:
             features: Patch features [batch_size, num_patches, feature_dim]
+            roi_confidence: Optional ROI confidence weights [batch_size, num_patches]
             return_attention: Whether to return attention weights
             
         Returns:
@@ -68,6 +69,14 @@ class AttentionMIL(nn.Module):
         # Compute attention scores
         attention_scores = self.attention(features)  # [B, N, 1]
         attention_weights = F.softmax(attention_scores, dim=1)  # [B, N, 1]
+        
+        # Apply ROI confidence weighting if provided
+        if roi_confidence is not None:
+            # roi_confidence shape: [B, N] -> [B, N, 1]
+            roi_confidence_expanded = roi_confidence.unsqueeze(-1)
+            # Weight attention by ROI confidence and renormalize
+            attention_weights = attention_weights * roi_confidence_expanded
+            attention_weights = attention_weights / (attention_weights.sum(dim=1, keepdim=True) + 1e-8)
         
         # Aggregate features with attention
         slide_features = torch.sum(
@@ -127,12 +136,13 @@ class GatedAttentionMIL(nn.Module):
             nn.Linear(hidden_dim, num_classes)
         )
     
-    def forward(self, features, return_attention=False):
+    def forward(self, features, roi_confidence=None, return_attention=False):
         """
         Forward pass with gated attention.
         
         Args:
             features: Patch features [batch_size, num_patches, feature_dim]
+            roi_confidence: Optional ROI confidence weights [batch_size, num_patches]
             return_attention: Whether to return attention weights
             
         Returns:
@@ -149,6 +159,14 @@ class GatedAttentionMIL(nn.Module):
         # Compute attention scores
         attention_scores = self.attention_weights(attention_gated)  # [B, N, 1]
         attention_weights = F.softmax(attention_scores, dim=1)  # [B, N, 1]
+        
+        # Apply ROI confidence weighting if provided
+        if roi_confidence is not None:
+            # roi_confidence shape: [B, N] -> [B, N, 1]
+            roi_confidence_expanded = roi_confidence.unsqueeze(-1)
+            # Weight attention by ROI confidence and renormalize
+            attention_weights = attention_weights * roi_confidence_expanded
+            attention_weights = attention_weights / (attention_weights.sum(dim=1, keepdim=True) + 1e-8)
         
         # Aggregate features
         slide_features = torch.sum(

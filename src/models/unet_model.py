@@ -48,11 +48,19 @@ class Up(nn.Module):
     def __init__(self, in_channels: int, out_channels: int, bilinear: bool = True):
         super().__init__()
         
+        # After concatenation, we'll have in_channels + skip_channels
+        # For standard U-Net, skip has in_channels // 2
+        # So total after concat = in_channels // 2 (upsampled) + in_channels // 2 (skip) = in_channels
+        
         if bilinear:
             self.up = nn.Upsample(scale_factor=2, mode='bilinear', align_corners=True)
-            self.conv = DoubleConv(in_channels, out_channels, in_channels // 2)
+            # After upsampling, channels remain in_channels
+            # After concat with skip (in_channels // 2), total = in_channels + in_channels // 2
+            self.conv = DoubleConv(in_channels + in_channels // 2, out_channels)
         else:
+            # ConvTranspose2d reduces channels to in_channels // 2
             self.up = nn.ConvTranspose2d(in_channels, in_channels // 2, kernel_size=2, stride=2)
+            # After concat with skip (in_channels // 2), total = in_channels
             self.conv = DoubleConv(in_channels, out_channels)
     
     def forward(self, x1, x2):
