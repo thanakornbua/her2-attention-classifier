@@ -16,7 +16,8 @@ def extract_features_to_disk(
     model_path: Path,
     output_dir: Path,
     batch_size: int = 32,
-    device: str = 'cuda'
+    device: str = 'cuda',
+    backbone_name: str = 'efficientnet_b0'
 ):
     """
     Extracts features from all patches using a trained Phase 1 model and saves them 
@@ -28,18 +29,19 @@ def extract_features_to_disk(
         output_dir (Path): Directory to save the extracted feature .npy files.
         batch_size (int): Batch size for inference.
         device (str): Device to run inference on ('cuda' or 'cpu').
+        backbone_name (str): Name of the backbone architecture.
     """
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
     
     # 1. Load Model
-    logger.info(f"Loading Phase 1 model from {model_path}")
-    model = PatchClassifier(backbone_name='efficientnet_b0', num_classes=2, pretrained=False)
+    logger.info(f"Loading Phase 1 model from {model_path} (Backbone: {backbone_name})")
+    model = PatchClassifier(backbone_name=backbone_name, num_classes=2, pretrained=False)
     
     if not model_path.exists():
         raise FileNotFoundError(f"Model checkpoint not found at {model_path}")
         
-    checkpoint = torch.load(model_path, map_location=device)
+    checkpoint = torch.load(model_path, map_location=device, weights_only=False)
     
     # Handle state dict keys if they start with 'module.' or 'model.'
     state_dict = checkpoint['model_state_dict'] if 'model_state_dict' in checkpoint else checkpoint

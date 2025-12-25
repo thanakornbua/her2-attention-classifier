@@ -1,0 +1,19 @@
+{
+  "requested_norm_ratio": 0.2,
+  "ratio_level": "case",
+  "stratify_labels": true,
+  "enforce_case_domain": true,
+  "seed": 42,
+  "n_norm_available": 230120,
+  "n_raw_available": 914698,
+  "n_selected": 1144818,
+  "n_selected_norm": 230120,
+  "n_selected_raw": 914698,
+  "n_selected_cases": 450,
+  "n_mixed_cases_in_input": 0,
+  "n_mixed_cases_in_selected": 0,
+  "label_counts_selected": {
+    "1": 606379,
+    "0": 538439
+  }
+}

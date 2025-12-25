@@ -1,0 +1,42 @@
+{
+  "best_auc": 0.5961898657501415,
+  "history": {
+    "train_loss": [
+      0.07878517010468623,
+      0.03128666484141385,
+      0.02280971729119411,
+      0.01826648526146976,
+      0.015689156350808732
+    ],
+    "val_loss": [
+      6.577841624375684,
+      6.576727014639326,
+      4.757868098745939,
+      6.398588633812121,
+      6.680389333400673
+    ],
+    "val_auc": [
+      0.5001862532688689,
+      0.5554544134924505,
+      0.5822201760808332,
+      0.5961898657501415,
+      0.5957977818912833
+    ]
+  },
+  "config": {
+    "seed": 42,
+    "batch_size": 16,
+    "num_epochs": 5,
+    "lr": 0.0001,
+    "backbone": "efficientnet_b0",
+    "num_classes": 2,
+    "dropout": 0.5,
+    "amp_enabled": true,
+    "num_workers": 12,
+    "prefetch_factor": 16,
+    "persistent_workers": true,
+    "pin_memory": false,
+    "early_stop_patience": 2,
+    "resume_from": null
+  }
+}
