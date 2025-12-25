@@ -18,6 +18,8 @@
 *.env
 *.pth
 *.npy
+*.bkup
+*.zip
 
 data/
 __pycache__/

@@ -18,12 +18,6 @@
         T. Buathongtanakarn (2025),
         P. Sirithipvanich (2025),
         et al.
-
-    LLM-Assistant:
-        1. Gemini 2.5 Pro
-    
-    With help of:
-        1. Multiple stackoverflow articles on file system traversal and pandas DataFrame creation.
 """
 import os
 import pandas as pd
