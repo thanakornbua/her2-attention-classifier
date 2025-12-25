@@ -12,9 +12,10 @@ using pre-extracted Zarr patches. It implements:
 import os
 import logging
 from pathlib import Path
-from typing import Dict, Optional, Tuple
+from typing import Dict, Optional, Tuple, List, Set
 
 import numpy as np
+import pandas as pd
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -147,11 +148,12 @@ def validate(
 def run_training_unet(
     zarr_path: str,
     output_dir: str = 'outputs/unet',
-    train_split: float = 0.8,
+    train_cases: Optional[Set[str]] = None,
+    val_cases: Optional[Set[str]] = None,
     config: Optional[Dict] = None
 ):
     """
-    Run U-Net training using Zarr dataset.
+    Run U-Net training using Zarr dataset with case-level splitting.
     """
     config = config or {}
     cfg = {
@@ -186,14 +188,33 @@ def run_training_unet(
     print_device_info(device)
     save_config(cfg, output_path / 'config.yaml')
     
-    # Dataset
+    # Dataset & Splitting
     logger.info(f"Loading dataset from {zarr_path}")
-    dataset = ZarrSegmentationDataset(zarr_path)
     
-    # Split
-    n_train = int(len(dataset) * train_split)
-    n_val = len(dataset) - n_train
-    train_ds, val_ds = random_split(dataset, [n_train, n_val], generator=torch.Generator().manual_seed(cfg['seed']))
+    # Load Metadata
+    metadata_path = Path(zarr_path).parent / "unet_patch_metadata.csv"
+    if metadata_path.exists() and train_cases is not None and val_cases is not None:
+        logger.info(f"Loading metadata from {metadata_path} for case-level splitting")
+        meta_df = pd.read_csv(metadata_path)
+        
+        # Filter indices
+        train_indices = meta_df[meta_df['case_name'].isin(train_cases)]['patch_idx'].values
+        val_indices = meta_df[meta_df['case_name'].isin(val_cases)]['patch_idx'].values
+        
+        logger.info(f"Train patches: {len(train_indices)} (from {len(train_cases)} cases)")
+        logger.info(f"Val patches: {len(val_indices)} (from {len(val_cases)} cases)")
+        
+        if len(train_indices) == 0:
+            raise ValueError("No training patches found! Check case names match metadata.")
+            
+        train_ds = ZarrSegmentationDataset(zarr_path, indices=train_indices)
+        val_ds = ZarrSegmentationDataset(zarr_path, indices=val_indices)
+    else:
+        logger.warning("Metadata not found or case splits not provided. Falling back to random split (POTENTIAL LEAKAGE).")
+        dataset = ZarrSegmentationDataset(zarr_path)
+        n_train = int(len(dataset) * 0.8)
+        n_val = len(dataset) - n_train
+        train_ds, val_ds = random_split(dataset, [n_train, n_val], generator=torch.Generator().manual_seed(cfg['seed']))
     
     # Calculate pos_weight
     logger.info("Computing class weights...")

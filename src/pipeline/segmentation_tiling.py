@@ -72,13 +72,17 @@ def extract_segmentation_patches(
     
     buffer_images = []
     buffer_masks = []
+    metadata_list = []
     BUFFER_SIZE = 64
     
     total_patches = 0
+    current_global_idx = 0
     
     for idx, row in tqdm(slides_df.iterrows(), total=len(slides_df), desc=f"Extracting Level {level} Patches"):
         wsi_path = str(row['full_path'])
         xml_path = row.get('full_path_annotation')
+        case_name = row.get('case_name', Path(wsi_path).stem)
+
         
         # Skip if no annotation
         if pd.isna(xml_path) or not os.path.exists(str(xml_path)):
@@ -136,6 +140,13 @@ def extract_segmentation_patches(
                             buffer_images.append(img_patch)
                             buffer_masks.append(mask_patch)
                             
+                            metadata_list.append({
+                                'case_name': case_name,
+                                'slide_id': Path(wsi_path).stem,
+                                'patch_idx': current_global_idx
+                            })
+                            current_global_idx += 1
+                            
                             if len(buffer_images) >= BUFFER_SIZE:
                                 images_ds.append(np.stack(buffer_images))
                                 masks_ds.append(np.stack(buffer_masks))
@@ -155,6 +166,13 @@ def extract_segmentation_patches(
         images_ds.append(np.stack(buffer_images))
         masks_ds.append(np.stack(buffer_masks))
         total_patches += len(buffer_images)
+    
+    # Save Metadata
+    if metadata_list:
+        metadata_df = pd.DataFrame(metadata_list)
+        metadata_path = output_path.parent / "unet_patch_metadata.csv"
+        metadata_df.to_csv(metadata_path, index=False)
+        logger.info(f"Metadata saved to {metadata_path}")
         
     logger.info(f"Extraction complete. Total patches: {total_patches}")
     logger.info(f"Saved to {output_path}")
