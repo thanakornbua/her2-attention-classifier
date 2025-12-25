@@ -175,6 +175,13 @@ def run_training_unet(
     # Logging
     tb_writer = SummaryWriter(str(output_path / 'tensorboard_logs'))
     set_seed(cfg['seed'])
+    
+    # Optimization: Enable cuDNN benchmark if requested (overrides set_seed defaults)
+    if config.get('benchmark', False):
+        logger.info("Enabling cuDNN benchmark for faster training")
+        torch.backends.cudnn.benchmark = True
+        torch.backends.cudnn.deterministic = False
+
     device = get_device()
     print_device_info(device)
     save_config(cfg, output_path / 'config.yaml')
