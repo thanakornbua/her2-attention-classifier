@@ -41,5 +41,5 @@ outputs/test_large_dataset
 *.wandb
 outputs/patches_index_train.csv
 outputs/evaluation/patches
-"*.csv" 
-"outputs/" 
+*.csv
+/outputs/
