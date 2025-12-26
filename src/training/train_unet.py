@@ -28,7 +28,7 @@ from ..models.unet_model import UNet
 from ..datasets.zarr_segmentation_dataset import ZarrSegmentationDataset
 from ..utils.device import get_device, print_device_info
 from ..utils.reproducibility import set_seed
-from ..utils.io import save_checkpoint, save_metrics, save_config
+from ..utils.io import save_checkpoint, save_metrics, save_config, load_checkpoint
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -165,6 +165,7 @@ def run_training_unet(
         'num_workers': config.get('num_workers', min(8, os.cpu_count() - 2) if os.name == 'posix' else 0),
         'amp_enabled': config.get('amp_enabled', True),
         'early_stop_patience': config.get('early_stop_patience', 10),
+        'resume_from': config.get('resume_from', None),
         # Model params
         'in_channels': 3,
         'num_classes': 2,
@@ -251,8 +252,19 @@ def run_training_unet(
     best_iou = 0.0
     patience = 0
     
+    start_epoch = 1
+    if cfg['resume_from']:
+        ckpt_path = Path(cfg['resume_from'])
+        if ckpt_path.exists():
+            logger.info(f"Resuming from checkpoint: {ckpt_path}")
+            ckpt = load_checkpoint(ckpt_path, model=model, optimizer=optimizer, device=device, weights_only=False)
+            start_epoch = ckpt.get('epoch', 0) + 1
+            if 'metrics' in ckpt and 'iou' in ckpt['metrics']:
+                best_iou = ckpt['metrics']['iou']
+            logger.info(f"Resumed at epoch {start_epoch-1} | Best IoU so far: {best_iou:.4f}")
+
     logger.info("Starting training...")
-    for epoch in range(1, cfg['num_epochs'] + 1):
+    for epoch in range(start_epoch, cfg['num_epochs'] + 1):
         train_loss = train_epoch(model, train_dl, optimizer, criterion, device, scaler, cfg['amp_enabled'])
         val_loss, val_iou = validate(model, val_dl, criterion, device, cfg['amp_enabled'])
         

@@ -1,0 +1,18 @@
+{
+  "model": "efficientnet_b0",
+  "aggregation": "weighted",
+  "auc": 0.5740740740740741,
+  "auc_ci": [
+    0.4769880952380952,
+    0.6917070195195195
+  ],
+  "accuracy": 0.5222222222222223,
+  "sensitivity": 0.5416666666666666,
+  "specificity": 0.4444444444444444,
+  "confusion_matrix": {
+    "TP": 39,
+    "FP": 10,
+    "TN": 8,
+    "FN": 33
+  }
+}

@@ -313,6 +313,7 @@ def run_training_phase2(
         'amp_enabled': config.get('amp_enabled', True),
         'num_workers': config.get('num_workers', 2),
         'early_stop_patience': config.get('early_stop_patience', 10),
+        'resume_from': config.get('resume_from', None),
     }
     
     # Setup
@@ -389,7 +390,19 @@ def run_training_phase2(
     patience_counter = 0
     history = {'train_loss': [], 'val_loss': [], 'val_auc': []}
     
-    for epoch in range(1, cfg['num_epochs'] + 1):
+    start_epoch = 1
+    if cfg['resume_from']:
+        ckpt_path = Path(cfg['resume_from'])
+        if ckpt_path.exists():
+            print(f"Resuming from checkpoint: {ckpt_path}")
+            # Fix: Set weights_only=False to avoid UnpicklingError with numpy scalars
+            ckpt = load_checkpoint(ckpt_path, model=model, optimizer=optimizer, device=device, weights_only=False)
+            start_epoch = ckpt.get('epoch', 0) + 1
+            if 'metrics' in ckpt and 'auc' in ckpt['metrics']:
+                best_auc = ckpt['metrics']['auc']
+            print(f"Resumed at epoch {start_epoch-1} | Best AUC so far: {best_auc:.4f}")
+
+    for epoch in range(start_epoch, cfg['num_epochs'] + 1):
         print(f"\nEpoch {epoch}/{cfg['num_epochs']}")
         
         # Train
